@@ -4,6 +4,7 @@ apm_modules/
 # Agent ignores
 .kiro/
 context/
+.agents/
 
 # Windows "mark of the web" artifacts (WSL)
 *:Zone.Identifier
