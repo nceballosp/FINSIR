@@ -29,12 +29,12 @@ The boto3/Athena details live only in the driven adapter, behind the
 
 ## Endpoints
 
-| Method | Path | Auth | Description | Status codes |
-| --- | --- | --- | --- | --- |
-| GET | `/health` | no | Liveness probe for App Runner | 200 |
-| GET | `/v1/clients/{ncodpers}` | yes | A client's silver records | 200, 401, 403, 404, 422, 500 |
-| GET | `/v1/clients/{ncodpers}/latest` | yes | The client's most recent record | 200, 401, 403, 404, 422, 500 |
-| GET | `/v1/months/{fecha_dato}/clients` | yes | Paginated clients for a month | 200, 401, 403, 422, 500 |
+| Method | Path                              | Auth | Description                     | Status codes                 |
+| ------ | --------------------------------- | ---- | ------------------------------- | ---------------------------- |
+| GET    | `/health`                         | no   | Liveness probe for App Runner   | 200                          |
+| GET    | `/v1/clients/{ncodpers}`          | yes  | A client's silver records       | 200, 401, 403, 404, 422, 500 |
+| GET    | `/v1/clients/{ncodpers}/latest`   | yes  | The client's most recent record | 200, 401, 403, 404, 422, 500 |
+| GET    | `/v1/months/{fecha_dato}/clients` | yes  | Paginated clients for a month   | 200, 401, 403, 422, 500      |
 
 Query params for the month listing: `page` (>= 1), `size` (1..200), `sort`
 (whitelisted silver column). Successful payloads are wrapped in `data`; errors
@@ -59,7 +59,8 @@ open). Issuer, audience, and signing material come from environment variables;
 
 - **Production**: RS256, keys fetched from `AUTH_JWKS_URL`, verifying
   `AUTH_AUDIENCE` and `AUTH_ISSUER`. An `AUTH_REQUIRED_SCOPE` gates the data
-  endpoints.
+  endpoints. RS256 verification relies on the pinned `cryptography` dependency
+  (installed via `requirements.txt`).
 - **Local/dev**: set `IS_AUTH_DEV_MODE=true` and `AUTH_DEV_SECRET=<dev-secret>`
   to validate HS256 tokens without committing any secret.
 
@@ -68,20 +69,20 @@ logged.
 
 ## Required environment variables
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `ATHENA_DATABASE` | yes | Glue catalog database (e.g. `finsir`) |
-| `ATHENA_WORKGROUP` | yes | Athena workgroup |
-| `ATHENA_OUTPUT` | yes | S3 URI for Athena results (e.g. `s3://<bucket>/athena-results/`) |
-| `ATHENA_TABLE` | no | Silver table (default `silver_train`) |
-| `AWS_REGION` | no | AWS region (default `us-east-1`) |
-| `AUTH_ISSUER` | prod | Expected `iss` claim |
-| `AUTH_AUDIENCE` | prod | Expected `aud` claim |
-| `AUTH_JWKS_URL` | prod | JWKS endpoint (RS256) |
-| `AUTH_REQUIRED_SCOPE` | no | Scope required for data endpoints |
-| `IS_AUTH_DEV_MODE` | no | `true` enables local HS256 validation |
-| `AUTH_DEV_SECRET` | dev | HS256 secret (dev mode only) |
-| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no | Log metadata |
+| Variable                                                   | Required | Purpose                                                          |
+| ---------------------------------------------------------- | -------- | ---------------------------------------------------------------- |
+| `ATHENA_DATABASE`                                          | yes      | Glue catalog database (e.g. `finsir`)                            |
+| `ATHENA_WORKGROUP`                                         | yes      | Athena workgroup                                                 |
+| `ATHENA_OUTPUT`                                            | yes      | S3 URI for Athena results (e.g. `s3://<bucket>/athena-results/`) |
+| `ATHENA_TABLE`                                             | no       | Silver table (default `silver_train`)                            |
+| `AWS_REGION`                                               | no       | AWS region (default `us-east-1`)                                 |
+| `AUTH_ISSUER`                                              | prod     | Expected `iss` claim                                             |
+| `AUTH_AUDIENCE`                                            | prod     | Expected `aud` claim                                             |
+| `AUTH_JWKS_URL`                                            | prod     | JWKS endpoint (RS256)                                            |
+| `AUTH_REQUIRED_SCOPE`                                      | no       | Scope required for data endpoints                                |
+| `IS_AUTH_DEV_MODE`                                         | no       | `true` enables local HS256 validation                            |
+| `AUTH_DEV_SECRET`                                          | dev      | HS256 secret (dev mode only)                                     |
+| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no       | Log metadata                                                     |
 
 In dev mode, `AUTH_DEV_SECRET` is required and the JWKS/audience/issuer are not;
 in production the reverse holds. `Settings` fails fast if required values are

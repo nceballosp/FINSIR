@@ -81,7 +81,17 @@ class AthenaSilverRepository(SilverRepository):
         size: int,
         sort: Optional[str] = None,
     ) -> MonthPage:
-        """Return a paginated page of records for a single month."""
+        """Return a paginated page of records for a single month.
+
+        Pagination uses a separate ``COUNT(*)`` plus a ``LIMIT/OFFSET`` query.
+        Accepted trade-offs for the append-mostly silver table:
+        - ``total`` and the page come from two queries, so they can disagree
+          under concurrent writes. The silver table is batch-appended, so this
+          window is effectively absent in practice.
+        - ``OFFSET`` re-scans from the start on deep pages. Fine at the current
+          per-month scale; revisit (e.g. keyset pagination) if month listings
+          grow large or are requested frequently.
+        """
         safe_date = self._validate_fecha_dato(fecha_dato)
         safe_page = self._validate_positive(page, "page")
         safe_size = self._validate_positive(size, "size")
@@ -166,9 +176,7 @@ class AthenaSilverRepository(SilverRepository):
 
     def _wait(self, execution_id: str) -> None:
         for _ in range(self._max_poll_attempts):
-            response = self._client.get_query_execution(
-                QueryExecutionId=execution_id
-            )
+            response = self._client.get_query_execution(QueryExecutionId=execution_id)
             status = response["QueryExecution"]["Status"]
             state = status["State"]
             if state == SUCCEEDED_STATE:
