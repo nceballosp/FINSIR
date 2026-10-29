@@ -1,0 +1,12 @@
+# Para trabajar en equipo, guarda el estado de terraform en S3.
+# Cambia el nombre de este archivo a backend.tf y ajusta los valores.
+# El bucket y la tabla de DynamoDB deben existir antes de ejecutar terraform init.
+terraform {
+  backend "s3" {
+    bucket         = "mi-bucket-del-estado"
+    key            = "finsir/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
+}

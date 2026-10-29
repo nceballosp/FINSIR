@@ -1,0 +1,1 @@
+"""FINSIR API application package."""

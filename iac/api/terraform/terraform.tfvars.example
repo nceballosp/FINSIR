@@ -1,0 +1,23 @@
+# Copy this file to terraform.tfvars and adjust the values.
+region  = "us-east-1"
+project = "finsir"
+
+# The data-platform bucket (see iac/data-platform outputs). Required.
+data_bucket_name = "finsir-123456789012"
+
+# Catalog database / workgroup created by the data platform.
+athena_database  = "finsir"
+athena_workgroup = "finsir"
+
+# Image to deploy (push it to ECR first; see the README).
+ecr_repository_name = "finsir-api"
+image_tag           = "latest"
+
+# Auth configuration for production (RS256 via JWKS). Secrets are NOT set here:
+# the service reads them from env; only non-secret issuer/audience/JWKS go here.
+auth_issuer         = "https://issuer.example.com/"
+auth_audience       = "finsir-clients"
+auth_jwks_url       = "https://issuer.example.com/.well-known/jwks.json"
+auth_required_scope = "silver:read"
+
+service_environment = "prod"

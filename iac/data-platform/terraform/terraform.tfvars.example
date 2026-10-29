@@ -1,0 +1,24 @@
+# Copia este archivo a terraform.tfvars y ajusta lo que necesites
+region  = "us-east-1"
+project = "finsir"
+
+# --- Cuenta nueva, todo desde cero (lo normal) ---
+# create_bucket = true
+# bucket_name   = ""            # vacio: finsir-<id de la cuenta>
+
+# --- Cuenta o proyecto que ya tiene bucket y rol ---
+# create_bucket          = false
+# bucket_name            = "mi-bucket-existente"
+# existing_glue_role_arn = "arn:aws:iam::123456789012:role/mi-rol-de-glue"
+
+# --- Si tu bucket ya organiza las carpetas de otra forma ---
+# raw_prefix        = "bronze/santander/train/"
+# silver_prefix     = "silver/santander/train/"
+# rechazados_prefix = "silver/santander/train_rechazados/"
+# calidad_prefix    = "silver/santander/train_calidad/"
+
+# --- Sin Athena (por ejemplo, si la API lee el Parquet directo) ---
+# create_athena = false
+
+# Etiquetas para todos los recursos
+# tags = { owner = "equipo-datos", env = "prod" }
