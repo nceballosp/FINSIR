@@ -1,0 +1,14 @@
+{
+    "hooks": {
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "agent",
+                        "prompt": "Before finishing: if this session produced durable knowledge (architecture or design decisions, bug root causes, workarounds, infrastructure/deployment details, coding conventions, integration patterns, domain knowledge, important discoveries), persist it now with mem_save, and mem_update any existing memory that changed. Then write a concise mem_session_summary (Goal, Instructions, Discoveries, Accomplished, Next Steps, Relevant Files) and call mem_session_end. Skip trivial edits, formatting-only changes, and facts obvious from the repo. If nothing durable was learned, skip saving."
+                    }
+                ]
+            }
+        ]
+    }
+}

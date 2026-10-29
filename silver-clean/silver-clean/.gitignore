@@ -1,0 +1,13 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+backend.tf
+
+# Datos
+*.csv
+*.csv.zip
+
+__pycache__/
+.pytest_cache/

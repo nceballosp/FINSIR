@@ -1,0 +1,67 @@
+
+# coding-engram/apm.yml — coding standards + engram
+#
+# The 9 coding-standard instructions PLUS engram: the engram + engram-memory
+# instructions and the engram MCP server. No global config, skills, or agent.
+#
+# HOOK CAVEAT — engram-save-on-stop.json is NOT installable via a dependency ref.
+# APM single-file refs only cover .instructions.md / .agent.md / .prompt.md; hooks
+# travel only with a whole-package pull. To get the engram hook in a consumer,
+# copy it manually after install:
+#   mkdir -p .apm/hooks
+#   cp engram-save-on-stop.json .apm/hooks/   # shipped alongside this manifest
+#   apm install   # re-run so the hook is integrated into each harness
+#
+# Prerequisites and env vars: see README.md in this folder. engram needs the
+# engram CLI on PATH and DEFAULT_ENGRAM_PROJECT exported.
+#
+# Usage: copy in as apm.yml, then:  apm install   (add --global for user scope)
+name: coding-engram-consumer
+version: 0.1.0
+description: Coding standards plus engram instructions and MCP server (hook added manually — see header).
+targets:
+    - kiro
+    - claude
+    - codex
+dependencies:
+    apm:
+        # Coding-standard instructions — single-file refs end in .instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/api-design.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/architecture.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/code-quality.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/dependencies.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/documentation.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/error-handling.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/logging.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/naming-conventions.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/testing-coverage.instructions.md
+        # engram instructions
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/engram.instructions.md
+        - JuanFelipeRestrepoBuitrago/Linux/.apm/instructions/engram-memory.instructions.md
+    mcp:
+        # document-loader — PDF/DOCX/DOC -> text extraction (stdio, uvx).
+        - name: document-loader
+          registry: false
+          transport: stdio
+          command: uvx
+          args:
+              - awslabs.document-loader-mcp-server@latest
+          env:
+              FASTMCP_LOG_LEVEL: ERROR
+
+        # engram — stdio, enabled. Project via ${DEFAULT_ENGRAM_PROJECT}.
+        - name: engram
+          registry: false
+          transport: stdio
+          command: engram
+          args:
+              - mcp
+              - --tools=agent
+              - --project
+              - final-project-emphasis
+          disabledTools:
+              - mem_delete
+              - mem_doctor
+              - mem_judge
+              - mem_compare
+              - mem_current_project

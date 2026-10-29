@@ -1,0 +1,321 @@
+lockfile_version: '1'
+apm_version: 0.35.0
+dependencies:
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-api-design
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/api-design.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/api-design.md
+  deployed_file_hashes:
+    .kiro/steering/api-design.md: sha256:f480babd04f710fa5f816f78cef542c0580397fbeb48bf0088ef62ef35bd0240
+  content_hash: sha256:829f8333d01d8e98df77e5928abcc3019ca9d5e11bd8179d171f78b13e9c4c95
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-architecture
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/architecture.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/architecture.md
+  deployed_file_hashes:
+    .kiro/steering/architecture.md: sha256:90ce797b61b58ae001a53e5585733c50f3699904953a9a19700c0ce4beb5a9e6
+  content_hash: sha256:0a196fcefceb4c9d61d150ab82395e75075fa0d20e10223a48781e71ec9a71d5
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-code-quality
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/code-quality.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/code-quality.md
+  deployed_file_hashes:
+    .kiro/steering/code-quality.md: sha256:cbdb95ba5240e56ba818fd25c9aec5210bb9b6d91493f1d985909ef1e175e9c0
+  content_hash: sha256:52ab3ba18c356f0053740df46e636781eae0eca4d5c9bd81f4d1e5baca3d9743
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-dependencies
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/dependencies.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/dependencies.md
+  deployed_file_hashes:
+    .kiro/steering/dependencies.md: sha256:5b1eeedef322ea5862ad4d321b66b99ca88a97436bc202a88be36109b7f4477d
+  content_hash: sha256:273fc785c377abd60307cf0fa04afafd1d24ca4e3bb5695a61d7cfdc910cb8eb
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-documentation
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/documentation.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/documentation.md
+  deployed_file_hashes:
+    .kiro/steering/documentation.md: sha256:f9d4ee2c8b7b70d027ea5cc9fb18ad6bde3024d74b37b28d5b55fec31bb3da93
+  content_hash: sha256:8abe03454c71787f2612a09ffa1087a8415362a601ecb17a2dfdb705dfc6ea1a
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-engram-memory
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/engram-memory.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/engram-memory.md
+  deployed_file_hashes:
+    .kiro/steering/engram-memory.md: sha256:2ef026e2ca1cb1f352142dd55afb02c193890a9a4dd8beae27d91e67700063b6
+  content_hash: sha256:68170f961d5c3d1d56d0c6cc7f8831a1dabc93d31d33b494d65c50845ad5a62b
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-engram
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/engram.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/engram.md
+  deployed_file_hashes:
+    .kiro/steering/engram.md: sha256:74734b4204837bfb64f78e18851b9ab89ebf99ccc1c745553b580e41b9664bfc
+  content_hash: sha256:151b6efef5a055220e3c126572c9e452b37d4a015a5f44958d60e8fdc6313d5d
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-error-handling
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/error-handling.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/error-handling.md
+  deployed_file_hashes:
+    .kiro/steering/error-handling.md: sha256:e772807bb2aecb4658ba16e9f19f22a5e0a7516d1467efa03cdfd3a93e3a9068
+  content_hash: sha256:6f5b29ee420a1f3320b376ef7767cac2de51d11136e00852b39fb71ecd00a9a7
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-logging
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/logging.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/logging.md
+  deployed_file_hashes:
+    .kiro/steering/logging.md: sha256:534a5b36f60d35da8372910fd89890f72ad11e0e2b3ecc10a333620d941950eb
+  content_hash: sha256:3125da036657ffe677bf8661f327be915dece0b6c15a4c13691cb7f42211f83c
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-naming-conventions
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/naming-conventions.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/naming-conventions.md
+  deployed_file_hashes:
+    .kiro/steering/naming-conventions.md: sha256:08361cf1d1736cf2d6eb60f7b62910501c843e2b3a640deeb4a3f48d72f1ee22
+  content_hash: sha256:a42f588b0e4db759157066c58dd4cc77d583f8e67bca3b01cd049512a90acce4
+- repo_url: juanfeliperestrepobuitrago/linux
+  materialization_repo_url: JuanFelipeRestrepoBuitrago/Linux
+  name: Linux-testing-coverage
+  host: github.com
+  resolved_commit: c0ba584aa9b43b065539e4334b0f1259b48172e9
+  version: 1.0.0
+  virtual_path: .apm/instructions/testing-coverage.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .kiro/steering/testing-coverage.md
+  deployed_file_hashes:
+    .kiro/steering/testing-coverage.md: sha256:5c9417d4caf5f6954bdde9f68ef6a1654ecdbfa2b6510a31a249bdea11889390
+  content_hash: sha256:ff6d3ed845c0b16c39715ce874c74203dcb3e39b20b68f615641d8f1dacb7013
+deployments:
+- kind: project-relative
+  target: kiro
+  value: .kiro/hooks/coding-engram-consumer-engram-save-on-stop-stop-1.json
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:0f3dc8e5a2b44f58a5a9aa039df6bf098ddd39222ae544708f310afe0494e1ff
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/api-design.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/api-design.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/api-design.instructions.md
+  content_hash: sha256:f480babd04f710fa5f816f78cef542c0580397fbeb48bf0088ef62ef35bd0240
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/architecture.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/architecture.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/architecture.instructions.md
+  content_hash: sha256:90ce797b61b58ae001a53e5585733c50f3699904953a9a19700c0ce4beb5a9e6
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/code-quality.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/code-quality.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/code-quality.instructions.md
+  content_hash: sha256:cbdb95ba5240e56ba818fd25c9aec5210bb9b6d91493f1d985909ef1e175e9c0
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/dependencies.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/dependencies.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/dependencies.instructions.md
+  content_hash: sha256:5b1eeedef322ea5862ad4d321b66b99ca88a97436bc202a88be36109b7f4477d
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/documentation.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/documentation.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/documentation.instructions.md
+  content_hash: sha256:f9d4ee2c8b7b70d027ea5cc9fb18ad6bde3024d74b37b28d5b55fec31bb3da93
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/engram-memory.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/engram-memory.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/engram-memory.instructions.md
+  content_hash: sha256:2ef026e2ca1cb1f352142dd55afb02c193890a9a4dd8beae27d91e67700063b6
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/engram.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/engram.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/engram.instructions.md
+  content_hash: sha256:74734b4204837bfb64f78e18851b9ab89ebf99ccc1c745553b580e41b9664bfc
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/error-handling.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/error-handling.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/error-handling.instructions.md
+  content_hash: sha256:e772807bb2aecb4658ba16e9f19f22a5e0a7516d1467efa03cdfd3a93e3a9068
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/logging.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/logging.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/logging.instructions.md
+  content_hash: sha256:534a5b36f60d35da8372910fd89890f72ad11e0e2b3ecc10a333620d941950eb
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/naming-conventions.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/naming-conventions.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/naming-conventions.instructions.md
+  content_hash: sha256:08361cf1d1736cf2d6eb60f7b62910501c843e2b3a640deeb4a3f48d72f1ee22
+- kind: project-relative
+  target: kiro
+  value: .kiro/steering/testing-coverage.md
+  runtime: null
+  scope: project
+  owners:
+  - juanfeliperestrepobuitrago/linux/.apm/instructions/testing-coverage.instructions.md
+  active_owner: juanfeliperestrepobuitrago/linux/.apm/instructions/testing-coverage.instructions.md
+  content_hash: sha256:5c9417d4caf5f6954bdde9f68ef6a1654ecdbfa2b6510a31a249bdea11889390
+- kind: uri
+  target: mcp
+  value: document-loader
+  runtime: kiro
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
+  value: engram
+  runtime: kiro
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+mcp_servers:
+- document-loader
+- engram
+mcp_configs:
+  document-loader:
+    name: document-loader
+    transport: stdio
+    env:
+      FASTMCP_LOG_LEVEL: ERROR
+    args:
+    - awslabs.document-loader-mcp-server@latest
+    registry: false
+    command: uvx
+  engram:
+    name: engram
+    transport: stdio
+    args:
+    - mcp
+    - --tools=agent
+    - --project
+    - final-project-emphasis
+    registry: false
+    command: engram
+    disabledTools:
+    - mem_delete
+    - mem_doctor
+    - mem_judge
+    - mem_compare
+    - mem_current_project
+mcp_target_servers:
+  kiro:
+  - document-loader
+  - engram
+local_deployed_files:
+- .kiro/hooks/coding-engram-consumer-engram-save-on-stop-stop-1.json
+local_deployed_file_hashes:
+  .kiro/hooks/coding-engram-consumer-engram-save-on-stop-stop-1.json: sha256:0f3dc8e5a2b44f58a5a9aa039df6bf098ddd39222ae544708f310afe0494e1ff

@@ -1,0 +1,66 @@
+# APM dependencies
+apm_modules/
+
+# Agent ignores
+.kiro/
+context/
+
+# Windows "mark of the web" artifacts (WSL)
+*:Zone.Identifier
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# keep *.tfvars.example, ignore real tfvars with secrets
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+*.swp
+*~
