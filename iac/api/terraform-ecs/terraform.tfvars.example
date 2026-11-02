@@ -2,9 +2,10 @@
 region  = "us-east-1"
 project = "finsir"
 
-# The data-platform bucket (see iac/data-platform outputs).
-# Placeholder here; the real value is the variable default in variables.tf.
-data_bucket_name = "finsir-123456789012"
+# The data-platform bucket. Leave unset to auto-derive <project>-<account-id>,
+# which matches the data platform's own default. Only set it if you gave the
+# data-platform bucket a custom name.
+# data_bucket_name = "finsir-<account-id>"
 athena_database  = "finsir"
 athena_workgroup = "finsir"
 athena_table     = "gold_train"

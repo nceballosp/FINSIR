@@ -13,10 +13,12 @@ data "aws_subnets" "default" {
 }
 
 locals {
-  account_id    = data.aws_caller_identity.current.account_id
-  region        = data.aws_region.current.name
-  bucket_arn    = "arn:aws:s3:::${var.data_bucket_name}"
-  athena_output = "s3://${var.data_bucket_name}/${var.athena_results_prefix}"
+  account_id = data.aws_caller_identity.current.account_id
+  region     = data.aws_region.current.name
+  # Match the data platform: <project>-<account-id> unless overridden.
+  data_bucket   = var.data_bucket_name != "" ? var.data_bucket_name : "${var.project}-${local.account_id}"
+  bucket_arn    = "arn:aws:s3:::${local.data_bucket}"
+  athena_output = "s3://${local.data_bucket}/${var.athena_results_prefix}"
   image_uri     = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${var.ecr_repository_name}:${var.image_tag}"
   name_prefix   = "${var.project}-api"
 }

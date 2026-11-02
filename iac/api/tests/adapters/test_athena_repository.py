@@ -85,27 +85,43 @@ def test_month_filter_compares_the_string_partition():
     assert "DATE '" not in client.last_query
 
 
+class SequencedClient(FakeAthenaClient):
+    """Returns scripted results in order and records every query run."""
+
+    def __init__(self, responses):
+        super().__init__(rows=[])
+        self._responses = responses
+        self._index = 0
+        self.queries = []
+
+    def start_query_execution(self, **kwargs):
+        self.queries.append(kwargs["QueryString"])
+        return super().start_query_execution(**kwargs)
+
+    def get_query_results(self, **_):
+        response = {"ResultSet": {"Rows": self._responses[self._index]}}
+        self._index += 1
+        return response
+
+
 def test_list_by_month_builds_page_with_count():
     count_rows = _rows_from(["total"], ["2"])
     data_rows = _rows_from(
         ["ncodpers", "fecha_dato"], ["1", "2015-01-28"], ["2", "2015-01-28"]
     )
-
-    class SequencedClient(FakeAthenaClient):
-        def __init__(self):
-            super().__init__(rows=[])
-            self._responses = [count_rows, data_rows]
-            self._index = 0
-
-        def get_query_results(self, **_):
-            response = {"ResultSet": {"Rows": self._responses[self._index]}}
-            self._index += 1
-            return response
-
-    repo = _make_repository(SequencedClient())
+    repo = _make_repository(SequencedClient([count_rows, data_rows]))
     page = repo.list_by_month("2015-01-28", page=1, size=10)
     assert page.total == 2
     assert len(page.items) == 2
+
+
+def test_month_page_query_puts_offset_before_limit():
+    # Athena (Trino) rejects "LIMIT n OFFSET m"; OFFSET must come first.
+    client = SequencedClient([_rows_from(["total"], ["5"]), _rows_from(["ncodpers"])])
+    _make_repository(client).list_by_month("2016-04-28", page=2, size=3)
+    page_query = client.queries[-1]
+    assert "OFFSET 3 LIMIT 3" in page_query
+    assert "LIMIT 3 OFFSET" not in page_query
 
 
 def test_validation_rejects_sql_injection_in_ncodpers():

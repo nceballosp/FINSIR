@@ -100,17 +100,31 @@ After that, the `gold_train` table is ready in Athena.
 
 ### 3. Build and push the API image
 
+Put the account URL and the tag on their own lines, with **no trailing `#`
+comment** on the `ECR_URL=` line. A comment pasted after the assignment gets
+folded into the value by the shell and the tag is lost, so the push targets a
+bogus repo like `finsir-apiatest` ("repository ... does not exist"). Build and
+push the full `repo:tag` reference, never a bare `$ECR_URL`:
+
 ```bash
-ECR_URL="663505294799.dkr.ecr.us-east-1.amazonaws.com/finsir-api"   # use your account's URL
+cd iac/api                 # the Dockerfile is here
+ECR_URL="663505294799.dkr.ecr.us-east-1.amazonaws.com/finsir-api"
+TAG="latest"
+IMAGE="$ECR_URL:$TAG"
+echo "$IMAGE"              # sanity check: must end in finsir-api:latest
+
 aws --profile terraform ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin "${ECR_URL%/*}"
-cd iac/api                              # the Dockerfile is here
-docker build -t "$ECR_URL:latest" .
-docker push "$ECR_URL:latest"
+docker build -t "$IMAGE" .
+docker push "$IMAGE"
 ```
 
 If the repo doesn't exist yet:
 `aws --profile terraform ecr create-repository --repository-name finsir-api --region us-east-1`.
+
+> If a push ever fails with "repository ... does not exist" and the name looks
+> mangled (e.g. `finsir-apiatest`), your `ECR_URL` picked up the inline comment.
+> Re-run the block above exactly, keeping the comment off the assignment line.
 
 ### 4. Deploy the API
 

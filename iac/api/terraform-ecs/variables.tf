@@ -39,9 +39,9 @@ variable "image_tag" {
 # --- Data platform references -----------------------------------------------
 
 variable "data_bucket_name" {
-  description = "Name of the data-platform S3 bucket (data lake)"
+  description = "Name of the data-platform S3 bucket (data lake). Empty = derive it as <project>-<account-id>, matching the data platform's default."
   type        = string
-  default     = "finsir-663505294799"
+  default     = ""
 }
 
 variable "athena_database" {

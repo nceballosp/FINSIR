@@ -89,10 +89,12 @@ class AthenaGoldTrainRepository(GoldTrainRepository):
         offset = (safe_page - 1) * safe_size
 
         total = self._count_for_month(safe_date)
+        # Athena (Trino) requires OFFSET before LIMIT; "LIMIT n OFFSET m" is a
+        # syntax error there.
         query = (
             f"SELECT * FROM {self._qualified_table} "
             f"WHERE fecha_dato = '{safe_date}'{order_clause} "
-            f"LIMIT {safe_size} OFFSET {offset}"
+            f"OFFSET {offset} LIMIT {safe_size}"
         )
         rows = self._run_query(query)
         items = [self._to_record(row) for row in rows]
