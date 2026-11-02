@@ -1,0 +1,25 @@
+# Copy this file to terraform.tfvars and adjust the values.
+region  = "us-east-1"
+project = "finsir"
+
+# The data-platform bucket (see iac/data-platform outputs).
+# Placeholder here; the real value is the variable default in variables.tf.
+data_bucket_name = "finsir-123456789012"
+athena_database  = "finsir"
+athena_workgroup = "finsir"
+athena_table     = "silver_train"
+
+# Image already in ECR.
+ecr_repository_name = "finsir-api"
+image_tag           = "latest"
+
+# Fargate sizing (valid combo).
+cpu    = "1024"
+memory = "2048"
+
+# Dev-mode HS256 auth. DO NOT commit a real secret here.
+# Pass it at apply time: -var="auth_dev_secret=..." or via TF_VAR_auth_dev_secret.
+# auth_dev_secret   = "replace-with-a-strong-dev-secret-min-16-chars"
+auth_required_scope = "silver:read"
+
+service_environment = "dev"
