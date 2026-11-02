@@ -12,8 +12,8 @@ from typing import Optional
 from app.domain.entities import ClientRecord, MonthPage
 
 
-class SilverRepository(ABC):
-    """Read port over the ``silver_train`` dataset.
+class GoldTrainRepository(ABC):
+    """Read port over the ``gold_train`` dataset.
 
     Implementations translate infrastructure failures into
     :class:`app.domain.errors.RepositoryError` and invalid inputs into
@@ -22,25 +22,13 @@ class SilverRepository(ABC):
 
     @abstractmethod
     def get_client_records(self, ncodpers: int) -> list[ClientRecord]:
-        """Return every silver record for a client, ordered by month.
+        """Return every gold_train record for a client, ordered by month.
 
         Args:
             ncodpers: The client identifier.
 
         Returns:
             The client's records (possibly empty).
-
-        Raises:
-            InvalidQueryError: If ``ncodpers`` is not a valid identifier.
-            RepositoryError: On an infrastructure failure.
-        """
-
-    @abstractmethod
-    def get_client_latest(self, ncodpers: int) -> Optional[ClientRecord]:
-        """Return the client's most recent record, or ``None`` if none exist.
-
-        Args:
-            ncodpers: The client identifier.
 
         Raises:
             InvalidQueryError: If ``ncodpers`` is not a valid identifier.

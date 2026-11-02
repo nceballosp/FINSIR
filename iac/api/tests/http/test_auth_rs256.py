@@ -20,7 +20,7 @@ from app.config import Settings
 
 AUDIENCE = "finsir-clients"
 ISSUER = "finsir-prod"
-REQUIRED_SCOPE = "silver:read"
+REQUIRED_SCOPE = "gold:read"
 JWKS_URL = "https://auth.example.com/.well-known/jwks.json"
 
 

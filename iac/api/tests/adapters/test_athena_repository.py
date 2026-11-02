@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from botocore.exceptions import ClientError
 
-from app.adapters.driven.athena.athena_silver_repository import (
-    AthenaSilverRepository,
+from app.adapters.driven.athena.athena_gold_train_repository import (
+    AthenaGoldTrainRepository,
 )
 from app.domain.errors import InvalidQueryError, RepositoryError
 
@@ -42,36 +42,47 @@ class FakeAthenaClient:
 
 def _rows_from(header, *data_rows):
     def _cells(values):
-        return {"Data": [{"VarCharValue": value} if value is not None else {} for value in values]}
+        return {
+            "Data": [
+                {"VarCharValue": value} if value is not None else {} for value in values
+            ]
+        }
 
     return [_cells(header), *[_cells(row) for row in data_rows]]
 
 
-def _make_repository(client) -> AthenaSilverRepository:
-    return AthenaSilverRepository(
+def _make_repository(client) -> AthenaGoldTrainRepository:
+    return AthenaGoldTrainRepository(
         athena_client=client,
         database="finsir",
         workgroup="finsir",
         output_location="s3://bucket/athena-results/",
-        table="silver_train",
+        table="gold_train",
         poll_interval_seconds=0,
         max_poll_attempts=3,
     )
 
 
 def test_get_client_records_maps_rows_and_preserves_null():
-    rows = _rows_from(["ncodpers", "fecha_dato", "sexo"], ["1", "2015-01-28", None])
-    repo = _make_repository(FakeAthenaClient(rows))
+    rows = _rows_from(
+        ["ncodpers", "fecha_dato", "sexo", "label_next_ind_cco_fin_ult1"],
+        ["1", "2015-01-28", None, "1"],
+    )
+    client = FakeAthenaClient(rows)
+    repo = _make_repository(client)
     records = repo.get_client_records(1)
     assert len(records) == 1
     assert records[0].ncodpers == 1
     assert records[0].get("sexo") is None
+    assert records[0].get("label_next_ind_cco_fin_ult1") == "1"
+    assert '"finsir"."gold_train"' in client.last_query
 
 
-def test_get_client_latest_returns_none_when_no_rows():
-    rows = _rows_from(["ncodpers", "fecha_dato"])
-    repo = _make_repository(FakeAthenaClient(rows))
-    assert repo.get_client_latest(1) is None
+def test_month_filter_compares_the_string_partition():
+    client = FakeAthenaClient(_rows_from(["total"], ["0"]))
+    _make_repository(client).list_by_month("2016-05-28", page=1, size=10)
+    assert "fecha_dato = '2016-05-28'" in client.last_query
+    assert "DATE '" not in client.last_query
 
 
 def test_list_by_month_builds_page_with_count():

@@ -1,16 +1,16 @@
-"""Use case: fetch all silver records for a client."""
+"""Use case: fetch all gold_train records for a client."""
 
 from __future__ import annotations
 
 from app.domain.entities import ClientRecord
 from app.domain.errors import ClientNotFoundError
-from app.use_cases.ports import SilverRepository
+from app.use_cases.ports import GoldTrainRepository
 
 
 class GetClientRecords:
-    """Return every silver record belonging to a client."""
+    """Return every gold_train record belonging to a client."""
 
-    def __init__(self, repository: SilverRepository) -> None:
+    def __init__(self, repository: GoldTrainRepository) -> None:
         self._repository = repository
 
     def execute(self, ncodpers: int) -> list[ClientRecord]:

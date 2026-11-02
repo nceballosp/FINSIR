@@ -14,13 +14,13 @@ is likely to get next month and returns a Top-K ranking (metric: MAP@7).
 
 Two pieces, both as Terraform on AWS (`us-east-1`, `aws ~> 5.80`, Terraform `>= 1.5`):
 
-| Part          | Path                 | What it does                                                                 |
-| ------------- | -------------------- | ---------------------------------------------------------------------------- |
-| Data platform | `iac/data-platform/` | S3 lake + Glue cleaning job + Athena tables (bronze/silver/rejected/quality) |
-| API           | `iac/api/`           | FastAPI that reads the silver data from Athena, runs on ECS Fargate          |
+| Part          | Path                 | What it does                                                                                |
+| ------------- | -------------------- | ------------------------------------------------------------------------------------------- |
+| Data platform | `iac/data-platform/` | S3 lake + Glue cleaning and gold jobs + Athena tables (bronze/silver/rejected/quality/gold) |
+| API           | `iac/api/`           | FastAPI that reads the gold training table from Athena, runs on ECS Fargate                 |
 
-Still to do: the gold layer, the ML model, and the Streamlit dashboard. The API
-serves the silver layer only.
+Still to do: the other gold tables, the ML model, and the Streamlit dashboard.
+The API serves the gold training table (`gold_train`) only.
 
 ## How the data flows
 
@@ -28,10 +28,14 @@ serves the silver layer only.
 CSV (Kaggle)
   └─▶ S3 Bronze (raw CSV)
         └─▶ Glue/PySpark cleans + types it
-              └─▶ S3 Silver (Parquet)   ◀── the API reads this
-                    └─▶ [future] Gold → ML model → dashboard
+              └─▶ S3 Silver (Parquet)
+                    └─▶ Glue/PySpark adds history + next-month labels
+                          └─▶ S3 Gold gold_train (Parquet)   ◀── the API reads this
+                                └─▶ [future] ML model → dashboard
 Athena can query every layer.
 ```
+
+`gold_train` columns: [`iac/data-platform/README.md`](iac/data-platform/README.md#gold-layer-gold_train).
 
 ## What you need
 
@@ -83,7 +87,16 @@ aws --profile terraform glue get-job-runs --job-name finsir-limpieza-train \
   --region us-east-1 --max-items 1 --query 'JobRuns[0].JobRunState'
 ```
 
-After that, the `silver_train` table is ready in Athena.
+After that, the `silver_train` table is ready in Athena. Then build the gold
+table and wait for `SUCCEEDED` the same way:
+
+```bash
+aws --profile terraform glue start-job-run --job-name finsir-gold-train --region us-east-1
+aws --profile terraform glue get-job-runs --job-name finsir-gold-train \
+  --region us-east-1 --max-items 1 --query 'JobRuns[0].JobRunState'
+```
+
+After that, the `gold_train` table is ready in Athena.
 
 ### 3. Build and push the API image
 
@@ -127,13 +140,14 @@ echo "http://$IP:8080"
 ```
 
 `/health` is open. For `/v1/*` you need a token signed with the same
-`auth_dev_secret` and a `silver:read` scope:
+`auth_dev_secret` and a `gold:read` scope:
 
 ```bash
 cd iac/api
-TOKEN=$(.venv/bin/python -c "import jwt,time; print(jwt.encode({'sub':'demo','scope':'silver:read','exp':int(time.time())+86400},'<your-auth_dev_secret>',algorithm='HS256'))")
+TOKEN=$(.venv/bin/python -c "import jwt,time; print(jwt.encode({'sub':'demo','scope':'gold:read','exp':int(time.time())+86400},'<your-auth_dev_secret>',algorithm='HS256'))")
 curl "http://$IP:8080/health"
-curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/clients/1/latest"
+curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/gold/train/clients/1375586"
+curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/gold/train/months/2016-04-28?size=10"
 ```
 
 Swagger UI is at `http://$IP:8080/docs` — click **Authorize** and paste the token
@@ -202,7 +216,7 @@ python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 export ATHENA_DATABASE=finsir ATHENA_WORKGROUP=finsir
 export ATHENA_OUTPUT=s3://finsir-<account-id>/athena-results/
-export IS_AUTH_DEV_MODE=true AUTH_DEV_SECRET=dev-secret AUTH_REQUIRED_SCOPE=silver:read
+export IS_AUTH_DEV_MODE=true AUTH_DEV_SECRET=dev-secret AUTH_REQUIRED_SCOPE=gold:read
 uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 

@@ -1,1 +1,1 @@
-"""Driven adapter: Athena-backed implementation of the SilverRepository port."""
+"""Driven adapter: Athena-backed implementation of the GoldTrainRepository port."""

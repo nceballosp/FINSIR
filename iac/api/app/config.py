@@ -13,7 +13,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_AWS_REGION = "us-east-1"
-DEFAULT_SILVER_TABLE = "silver_train"
+DEFAULT_GOLD_TABLE = "gold_train"
 DEFAULT_SERVICE_NAME = "finsir-service"
 DEFAULT_SERVICE_VERSION = "0.1.0"
 DEFAULT_SERVICE_ENVIRONMENT = "local"
@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     """Typed settings read from UPPER_SNAKE_CASE environment variables.
 
     Athena:
-        athena_database: Glue catalog database holding the silver tables.
+        athena_database: Glue catalog database holding the gold tables.
         athena_workgroup: Athena workgroup used to run queries.
         athena_output: S3 URI where Athena writes query results.
-        athena_table: Silver table name (defaults to ``silver_train``).
+        athena_table: Gold table name (defaults to ``gold_train``).
         aws_region: AWS region for the Athena/boto3 clients.
 
     Auth (JWT validated inside FastAPI, never via API Gateway):
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     athena_database: str = ""
     athena_workgroup: str = ""
     athena_output: str = ""
-    athena_table: str = DEFAULT_SILVER_TABLE
+    athena_table: str = DEFAULT_GOLD_TABLE
     aws_region: str = DEFAULT_AWS_REGION
 
     auth_issuer: Optional[str] = None

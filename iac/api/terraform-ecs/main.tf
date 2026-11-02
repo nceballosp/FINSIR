@@ -74,7 +74,7 @@ data "aws_iam_policy_document" "task" {
     ]
   }
 
-  # Read catalog metadata for the silver database/tables.
+  # Read catalog metadata for the gold database/tables.
   statement {
     sid = "GlueCatalog"
     actions = [
@@ -98,7 +98,7 @@ data "aws_iam_policy_document" "task" {
     resources = [local.bucket_arn]
   }
 
-  # Read the silver data.
+  # Read the gold data.
   statement {
     sid       = "ReadData"
     actions   = ["s3:GetObject"]

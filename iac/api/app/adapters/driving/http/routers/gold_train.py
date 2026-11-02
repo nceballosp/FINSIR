@@ -1,12 +1,13 @@
-"""Versioned ``/v1`` data routers over the silver layer (auth required).
+"""Versioned ``/v1/gold/train`` routers over the gold training table (auth required).
 
 Endpoints:
-- ``GET /v1/clients/{ncodpers}``          a client's silver records
-- ``GET /v1/clients/{ncodpers}/latest``   the client's most recent record
-- ``GET /v1/months/{fecha_dato}/clients`` paginated listing for a month
+- ``GET /v1/gold/train/clients/{ncodpers}``    a client's gold_train rows, all months
+- ``GET /v1/gold/train/months/{fecha_dato}``   paginated gold_train rows for a month
 
-All routes require a valid bearer token. Query parameters are validated at this
-HTTP boundary (fail fast); violations become 422 via the validation handler.
+Columns prefixed ``label_next_`` are the model answers (products added the next
+month), not features. All routes require a valid bearer token. Query parameters
+are validated at this HTTP boundary (fail fast); violations become 422 via the
+validation handler.
 """
 
 from __future__ import annotations
@@ -17,7 +18,6 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from app.adapters.driving.http.auth import require_authenticated
 from app.adapters.driving.http.dependencies import (
-    get_client_latest_use_case,
     get_client_records_use_case,
     list_month_use_case,
 )
@@ -28,7 +28,6 @@ from app.adapters.driving.http.schemas import (
     PageMeta,
 )
 from app.domain.entities import ClientRecord, MonthPage
-from app.use_cases.get_client_latest import GetClientLatest
 from app.use_cases.get_client_records import GetClientRecords
 from app.use_cases.list_month import ListMonth
 
@@ -39,9 +38,9 @@ DEFAULT_PAGE_SIZE = 50
 FECHA_DATO_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
 router = APIRouter(
-    prefix="/v1",
+    prefix="/v1/gold/train",
     dependencies=[Depends(require_authenticated)],
-    tags=["clients"],
+    tags=["gold_train"],
 )
 
 
@@ -68,37 +67,23 @@ def _to_page_response(page: MonthPage) -> MonthPageResponse:
 @router.get(
     "/clients/{ncodpers}",
     response_model=DataResponse[list[ClientRecordResponse]],
-    summary="List a client's silver records",
+    summary="List a client's gold_train rows",
 )
 async def list_client_records(
     ncodpers: int = Path(..., ge=0, description="Client identifier"),
     use_case: GetClientRecords = Depends(get_client_records_use_case),
 ) -> DataResponse[list[ClientRecordResponse]]:
-    """Return every silver record for ``ncodpers`` (404 if none)."""
+    """Return every gold_train row for ``ncodpers``, ordered by month (404 if none)."""
     records = use_case.execute(ncodpers)
     return DataResponse(data=[_to_record_response(record) for record in records])
 
 
 @router.get(
-    "/clients/{ncodpers}/latest",
-    response_model=DataResponse[ClientRecordResponse],
-    summary="Get a client's most recent silver record",
-)
-async def get_client_latest(
-    ncodpers: int = Path(..., ge=0, description="Client identifier"),
-    use_case: GetClientLatest = Depends(get_client_latest_use_case),
-) -> DataResponse[ClientRecordResponse]:
-    """Return the most recent silver record for ``ncodpers`` (404 if none)."""
-    record = use_case.execute(ncodpers)
-    return DataResponse(data=_to_record_response(record))
-
-
-@router.get(
-    "/months/{fecha_dato}/clients",
+    "/months/{fecha_dato}",
     response_model=DataResponse[MonthPageResponse],
-    summary="List clients for a month (paginated, sortable)",
+    summary="List gold_train rows for a month (paginated, sortable)",
 )
-async def list_month_clients(
+async def list_month_records(
     fecha_dato: str = Path(
         ..., pattern=FECHA_DATO_PATTERN, description="Month in YYYY-MM-DD form"
     ),
@@ -109,6 +94,6 @@ async def list_month_clients(
     sort: Optional[str] = Query(None, description="Column to sort by (ascending)"),
     use_case: ListMonth = Depends(list_month_use_case),
 ) -> DataResponse[MonthPageResponse]:
-    """Return a paginated page of client records for ``fecha_dato``."""
+    """Return a paginated page of gold_train rows for ``fecha_dato``."""
     page_result = use_case.execute(fecha_dato, page, size, sort)
     return DataResponse(data=_to_page_response(page_result))

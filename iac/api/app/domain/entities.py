@@ -1,7 +1,8 @@
-"""Pure domain entities for the FINSIR silver layer.
+"""Pure domain entities for the FINSIR gold layer.
 
-These entities mirror the ``silver_train`` table schema produced by the data
-platform's Glue job. They carry no framework dependencies.
+These entities mirror the ``gold_train`` table schema produced by the data
+platform's gold Glue job (``iac/data-platform/glue/gold_train.py``). They carry
+no framework dependencies.
 
 Business rule: a ``None`` value means the datum does not exist in the source.
 The domain never fabricates defaults for a missing column.
@@ -12,33 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields
 from typing import Any, Optional
 
-# The ``silver_train`` columns, in schema order (excluding the partition key).
-# Kept here as the single source of truth so the Athena adapter and the API
-# response model stay aligned with the domain entity.
-SILVER_COLUMN_NAMES: tuple[str, ...] = (
-    "ncodpers",
-    "ind_empleado",
-    "pais_residencia",
-    "sexo",
-    "age",
-    "fecha_alta",
-    "ind_nuevo",
-    "antiguedad",
-    "indrel",
-    "ult_fec_cli_1t",
-    "indrel_1mes",
-    "tiprel_1mes",
-    "indresi",
-    "indext",
-    "conyuemp",
-    "canal_entrada",
-    "indfall",
-    "tipodom",
-    "cod_prov",
-    "nomprov",
-    "ind_actividad_cliente",
-    "renta",
-    "segmento",
+PRODUCTS: tuple[str, ...] = (
     "ind_ahor_fin_ult1",
     "ind_aval_fin_ult1",
     "ind_cco_fin_ult1",
@@ -63,24 +38,54 @@ SILVER_COLUMN_NAMES: tuple[str, ...] = (
     "ind_nomina_ult1",
     "ind_nom_pens_ult1",
     "ind_recibo_ult1",
-    "campos_rescatados",
-    "campos_invalidados",
-    # Partition key, present on every silver record.
-    "fecha_dato",
+)
+PROFILE_COLUMNS: tuple[str, ...] = (
+    "ind_empleado",
+    "pais_residencia",
+    "sexo",
+    "age",
+    "antiguedad",
+    "ind_nuevo",
+    "indrel",
+    "indrel_1mes",
+    "tiprel_1mes",
+    "indresi",
+    "indext",
+    "canal_entrada",
+    "indfall",
+    "cod_prov",
+    "ind_actividad_cliente",
+    "renta",
+    "segmento",
+)
+LAGS: tuple[int, ...] = (1, 3, 6)
+
+# The ``gold_train`` columns in schema order, ending with the partition key.
+# Single source of truth for the Athena adapter (column mapping and the sort
+# whitelist); must match ``gold_columns()`` in the gold Glue job.
+GOLD_TRAIN_COLUMN_NAMES: tuple[str, ...] = (
+    ("ncodpers", "month_of_year")
+    + PROFILE_COLUMNS
+    + PRODUCTS
+    + tuple(f"{product}_lag{months}" for months in LAGS for product in PRODUCTS)
+    + tuple(f"added_{product}" for product in PRODUCTS)
+    + ("n_products", "n_products_added", "n_products_dropped", "has_previous_month")
+    + tuple(f"label_next_{product}" for product in PRODUCTS)
+    + ("label_next_n_added", "fecha_dato")
 )
 
 
 @dataclass(frozen=True)
 class ClientRecord:
-    """A single monthly silver record for one client (``ncodpers``).
+    """A single monthly ``gold_train`` row for one client (``ncodpers``).
 
     Every attribute is optional: a ``None`` reflects a missing value in the
     source data and must never be replaced with a fabricated default.
 
     Attributes:
-        ncodpers: The client identifier (bigint in the silver schema).
+        ncodpers: The client identifier (bigint in the gold schema).
         fecha_dato: The partition month in ``YYYY-MM-DD`` form.
-        values: Remaining silver columns keyed by column name. Absent columns
+        values: Remaining gold columns keyed by column name. Absent columns
             are simply not present; explicit ``None`` values are preserved.
     """
 
@@ -92,7 +97,7 @@ class ClientRecord:
         """Return the value of ``column_name`` or ``None`` when absent.
 
         Args:
-            column_name: A silver column name.
+            column_name: A gold column name.
 
         Returns:
             The stored value, or ``None`` when the column does not exist for
@@ -107,7 +112,7 @@ class ClientRecord:
     def as_dict(self) -> dict[str, Any]:
         """Return the record as a flat dict in schema order, preserving nulls."""
         flat: dict[str, Any] = {}
-        for column_name in SILVER_COLUMN_NAMES:
+        for column_name in GOLD_TRAIN_COLUMN_NAMES:
             flat[column_name] = self.get(column_name)
         return flat
 
@@ -138,3 +143,4 @@ class MonthPage:
 _ENTITY_FIELD_NAMES = {f.name for f in fields(ClientRecord)}
 assert "ncodpers" in _ENTITY_FIELD_NAMES
 assert "fecha_dato" in _ENTITY_FIELD_NAMES
+assert len(GOLD_TRAIN_COLUMN_NAMES) == 169

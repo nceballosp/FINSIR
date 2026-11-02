@@ -34,3 +34,61 @@ resource "aws_glue_job" "limpieza" {
     "--TempDir"             = "s3://${local.bucket_id}/tmp/"
   }
 }
+
+# Gold training table, built from silver. Run it after the cleaning job.
+resource "aws_glue_job" "gold_train" {
+  name              = local.gold_job_name
+  role_arn          = local.glue_role_arn
+  glue_version      = var.glue_version
+  worker_type       = var.worker_type
+  number_of_workers = var.number_of_workers
+  timeout           = var.timeout_minutes
+  max_retries       = 0
+
+  command {
+    name            = "glueetl"
+    python_version  = "3"
+    script_location = "s3://${local.bucket_id}/${aws_s3_object.gold_script.key}"
+  }
+
+  default_arguments = {
+    "--BUCKET"              = local.bucket_id
+    "--SILVER"              = var.silver_prefix
+    "--GOLD"                = var.gold_prefix
+    "--job-language"        = "python"
+    "--enable-metrics"      = "true"
+    "--enable-job-insights" = "false"
+    "--enable-spark-ui"     = "false"
+    "--job-bookmark-option" = "job-bookmark-disable"
+    "--TempDir"             = "s3://${local.bucket_id}/tmp/"
+  }
+}
+
+# Gold segment conversion table, built from silver. Run it after cleaning.
+resource "aws_glue_job" "gold_segment_conversion" {
+  name              = local.conversion_job_name
+  role_arn          = local.glue_role_arn
+  glue_version      = var.glue_version
+  worker_type       = var.worker_type
+  number_of_workers = var.number_of_workers
+  timeout           = var.timeout_minutes
+  max_retries       = 0
+
+  command {
+    name            = "glueetl"
+    python_version  = "3"
+    script_location = "s3://${local.bucket_id}/${aws_s3_object.conversion_script.key}"
+  }
+
+  default_arguments = {
+    "--BUCKET"              = local.bucket_id
+    "--SILVER"              = var.silver_prefix
+    "--GOLD"                = var.conversion_prefix
+    "--job-language"        = "python"
+    "--enable-metrics"      = "true"
+    "--enable-job-insights" = "false"
+    "--enable-spark-ui"     = "false"
+    "--job-bookmark-option" = "job-bookmark-disable"
+    "--TempDir"             = "s3://${local.bucket_id}/tmp/"
+  }
+}

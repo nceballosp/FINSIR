@@ -13,7 +13,7 @@ class DomainError(Exception):
 
 
 class ClientNotFoundError(DomainError):
-    """Raised when a client (``ncodpers``) has no silver records.
+    """Raised when a client (``ncodpers``) has no gold_train records.
 
     Attributes:
         ncodpers: The client identifier that was not found.
@@ -21,7 +21,7 @@ class ClientNotFoundError(DomainError):
 
     def __init__(self, ncodpers: int) -> None:
         self.ncodpers = ncodpers
-        super().__init__(f"No silver records for client {ncodpers}")
+        super().__init__(f"No gold_train records for client {ncodpers}")
 
 
 class InvalidQueryError(DomainError):

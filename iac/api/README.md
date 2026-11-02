@@ -1,9 +1,11 @@
-# FINSIR API (silver service)
+# FINSIR API (gold service)
 
-FastAPI service that serves the FINSIR silver data. It queries Athena
-(`silver_train`) and reads table info from the Glue catalog. It runs on AWS ECS
+FastAPI service that serves the FINSIR gold training table. It queries Athena
+(`gold_train`) and reads table info from the Glue catalog. It runs on AWS ECS
 Fargate at `http://<task-ip>:8080` (plain HTTP, no load balancer). A bearer JWT is
-checked inside FastAPI — there's no API Gateway. Gold endpoints come later.
+checked inside FastAPI — there's no API Gateway. The silver endpoints were
+removed; the columns are documented in
+[`../data-platform/README.md`](../data-platform/README.md#gold-layer-gold_train).
 
 ## How the code is organized (hexagonal)
 
@@ -12,7 +14,7 @@ Dependencies point inward: `adapters -> use cases -> domain`.
 ```
 app/
   domain/            Entities + typed errors. No framework imports.
-  use_cases/         SilverRepository port + the three use cases.
+  use_cases/         GoldTrainRepository port + the two use cases.
   adapters/
     driving/http/    FastAPI app, routers, auth, logging, error handling.
     driven/athena/   Athena-backed repository (boto3), validation, error mapping.
@@ -21,28 +23,31 @@ app/
   main.py            Entry point (uvicorn app.main:app).
 ```
 
-All boto3/Athena code lives behind the `SilverRepository` port, so tests use a
-fake repository and make no AWS calls.
+All boto3/Athena code lives behind the `GoldTrainRepository` port, so tests use
+a fake repository and make no AWS calls.
 
 ## Endpoints
 
-| Method | Path                              | Auth | What it returns                 |
-| ------ | --------------------------------- | ---- | ------------------------------- |
-| GET    | `/health`                         | no   | Health check (used by ECS)      |
-| GET    | `/v1/clients/{ncodpers}`          | yes  | A client's silver records       |
-| GET    | `/v1/clients/{ncodpers}/latest`   | yes  | The client's latest record      |
-| GET    | `/v1/months/{fecha_dato}/clients` | yes  | Clients for a month (paginated) |
+| Method | Path                                 | Auth | What it returns                                |
+| ------ | ------------------------------------ | ---- | ---------------------------------------------- |
+| GET    | `/health`                            | no   | Health check (used by ECS)                     |
+| GET    | `/v1/gold/train/clients/{ncodpers}`  | yes  | A client's `gold_train` rows, ordered by month |
+| GET    | `/v1/gold/train/months/{fecha_dato}` | yes  | `gold_train` rows for a month (paginated)      |
 
-Month listing params: `page` (>= 1), `size` (1..200), `sort` (an allowed column).
+Month listing params: `page` (>= 1), `size` (1..200), `sort` (a `gold_train`
+column). Each row comes back as `ncodpers`, `fecha_dato` and an `attributes`
+object with the other 167 columns (values as strings, nulls kept). Columns that
+start with `label_next_` are the model answers, not features; `added_<product>`
+flags are features (the product was added this month).
+
 Success responses wrap data in `data`; errors use `{error.code, error.message,
 correlationId}` and never leak internals.
 
 ```bash
 TOKEN="<bearer-jwt>"
 BASE="http://<task-ip>:8080"
-curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/clients/1"
-curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/clients/1/latest"
-curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/months/2015-01-28/clients?page=1&size=50"
+curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/train/clients/1375586"
+curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/train/months/2016-04-28?page=1&size=50"
 ```
 
 ## Auth
@@ -59,18 +64,18 @@ Missing/bad token → 401; wrong scope → 403. The token is never logged.
 
 ## Environment variables
 
-| Variable                                                   | Needed | Purpose                               |
-| ---------------------------------------------------------- | ------ | ------------------------------------- |
-| `ATHENA_DATABASE`                                          | yes    | Glue database (e.g. `finsir`)         |
-| `ATHENA_WORKGROUP`                                         | yes    | Athena workgroup                      |
-| `ATHENA_OUTPUT`                                            | yes    | S3 URI for Athena results             |
-| `ATHENA_TABLE`                                             | no     | Silver table (default `silver_train`) |
-| `AWS_REGION`                                               | no     | Region (default `us-east-1`)          |
-| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod   | RS256 token checks                    |
-| `AUTH_REQUIRED_SCOPE`                                      | no     | Scope needed for data routes          |
-| `IS_AUTH_DEV_MODE`                                         | no     | `true` turns on HS256 dev mode        |
-| `AUTH_DEV_SECRET`                                          | dev    | HS256 secret (dev mode)               |
-| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no     | Log metadata                          |
+| Variable                                                   | Needed | Purpose                           |
+| ---------------------------------------------------------- | ------ | --------------------------------- |
+| `ATHENA_DATABASE`                                          | yes    | Glue database (e.g. `finsir`)     |
+| `ATHENA_WORKGROUP`                                         | yes    | Athena workgroup                  |
+| `ATHENA_OUTPUT`                                            | yes    | S3 URI for Athena results         |
+| `ATHENA_TABLE`                                             | no     | Gold table (default `gold_train`) |
+| `AWS_REGION`                                               | no     | Region (default `us-east-1`)      |
+| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod   | RS256 token checks                |
+| `AUTH_REQUIRED_SCOPE`                                      | no     | Scope needed for data routes      |
+| `IS_AUTH_DEV_MODE`                                         | no     | `true` turns on HS256 dev mode    |
+| `AUTH_DEV_SECRET`                                          | dev    | HS256 secret (dev mode)           |
+| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no     | Log metadata                      |
 
 Dev mode needs `AUTH_DEV_SECRET`; prod needs the JWKS/audience/issuer. The app
 fails fast if a required value is missing.
@@ -82,7 +87,7 @@ python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 export ATHENA_DATABASE=finsir ATHENA_WORKGROUP=finsir
 export ATHENA_OUTPUT=s3://finsir-<account-id>/athena-results/
-export IS_AUTH_DEV_MODE=true AUTH_DEV_SECRET=dev-secret AUTH_REQUIRED_SCOPE=silver:read
+export IS_AUTH_DEV_MODE=true AUTH_DEV_SECRET=dev-secret AUTH_REQUIRED_SCOPE=gold:read
 uvicorn app.main:app --host 0.0.0.0 --port 8080   # needs AWS creds for the data routes
 ```
 

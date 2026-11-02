@@ -34,3 +34,17 @@ resource "aws_s3_object" "script" {
   source = "${path.module}/../glue/limpieza_train.py"
   etag   = filemd5("${path.module}/../glue/limpieza_train.py")
 }
+
+resource "aws_s3_object" "gold_script" {
+  bucket = local.bucket_id
+  key    = local.gold_script_key
+  source = "${path.module}/../glue/gold_train.py"
+  etag   = filemd5("${path.module}/../glue/gold_train.py")
+}
+
+resource "aws_s3_object" "conversion_script" {
+  bucket = local.bucket_id
+  key    = local.conversion_script_key
+  source = "${path.module}/../glue/gold_segment_conversion.py"
+  etag   = filemd5("${path.module}/../glue/gold_segment_conversion.py")
+}

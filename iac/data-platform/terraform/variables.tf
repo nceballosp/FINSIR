@@ -60,6 +60,18 @@ variable "calidad_prefix" {
   default     = "calidad/train/"
 }
 
+variable "gold_prefix" {
+  description = "Output folder of the gold training table (Parquet partitioned by fecha_dato), with trailing slash"
+  type        = string
+  default     = "gold/train/"
+}
+
+variable "conversion_prefix" {
+  description = "Output folder of the gold segment conversion table (Parquet partitioned by fecha_dato), with trailing slash"
+  type        = string
+  default     = "gold/segment_conversion/"
+}
+
 variable "scripts_prefix" {
   description = "Carpeta donde se sube el script de Glue, con barra final"
   type        = string

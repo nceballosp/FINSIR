@@ -14,7 +14,7 @@ T = TypeVar("T")
 
 
 class ClientRecordResponse(BaseModel):
-    """A single silver record as a flat JSON object, nulls preserved."""
+    """A single gold_train record as a flat JSON object, nulls preserved."""
 
     ncodpers: Optional[int] = None
     fecha_dato: Optional[str] = None

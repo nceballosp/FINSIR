@@ -1,17 +1,17 @@
-"""Use case: list and paginate silver records for a single month."""
+"""Use case: list and paginate gold_train records for a single month."""
 
 from __future__ import annotations
 
 from typing import Optional
 
 from app.domain.entities import MonthPage
-from app.use_cases.ports import SilverRepository
+from app.use_cases.ports import GoldTrainRepository
 
 
 class ListMonth:
-    """Return a paginated page of silver records for a given month."""
+    """Return a paginated page of gold_train records for a given month."""
 
-    def __init__(self, repository: SilverRepository) -> None:
+    def __init__(self, repository: GoldTrainRepository) -> None:
         self._repository = repository
 
     def execute(

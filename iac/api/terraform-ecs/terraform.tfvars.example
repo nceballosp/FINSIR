@@ -7,7 +7,7 @@ project = "finsir"
 data_bucket_name = "finsir-123456789012"
 athena_database  = "finsir"
 athena_workgroup = "finsir"
-athena_table     = "silver_train"
+athena_table     = "gold_train"
 
 # Image already in ECR.
 ecr_repository_name = "finsir-api"
@@ -20,6 +20,6 @@ memory = "2048"
 # Dev-mode HS256 auth. DO NOT commit a real secret here.
 # Pass it at apply time: -var="auth_dev_secret=..." or via TF_VAR_auth_dev_secret.
 # auth_dev_secret   = "replace-with-a-strong-dev-secret-min-16-chars"
-auth_required_scope = "silver:read"
+auth_required_scope = "gold:read"
 
 service_environment = "dev"

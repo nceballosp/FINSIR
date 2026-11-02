@@ -166,3 +166,99 @@ resource "aws_glue_catalog_table" "calidad_train" {
     }
   }
 }
+
+# Gold training table: one row per client and month, partitioned by fecha_dato
+resource "aws_glue_catalog_table" "gold_train" {
+  count = var.create_athena ? 1 : 0
+
+  name          = "gold_train"
+  database_name = aws_glue_catalog_database.this[0].name
+  table_type    = "EXTERNAL_TABLE"
+
+  parameters = merge(
+    {
+      EXTERNAL              = "TRUE"
+      "parquet.compression" = "SNAPPY"
+    },
+    var.partition_projection ? {
+      "projection.enabled"                  = "true"
+      "projection.fecha_dato.type"          = "date"
+      "projection.fecha_dato.format"        = "yyyy-MM-dd"
+      "projection.fecha_dato.range"         = "${var.primer_corte},NOW"
+      "projection.fecha_dato.interval"      = "1"
+      "projection.fecha_dato.interval.unit" = "MONTHS"
+      "storage.location.template"           = "s3://${local.bucket_id}/${var.gold_prefix}fecha_dato=$${fecha_dato}/"
+    } : {}
+  )
+
+  partition_keys {
+    name = "fecha_dato"
+    type = "string"
+  }
+
+  storage_descriptor {
+    location      = "s3://${local.bucket_id}/${var.gold_prefix}"
+    input_format  = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
+    output_format = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
+
+    ser_de_info {
+      serialization_library = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+    }
+
+    dynamic "columns" {
+      for_each = local.columnas_gold
+      content {
+        name = columns.value.name
+        type = columns.value.type
+      }
+    }
+  }
+}
+
+# Gold segment conversion: one row per month, segment and product
+resource "aws_glue_catalog_table" "gold_segment_conversion" {
+  count = var.create_athena ? 1 : 0
+
+  name          = "gold_segment_conversion"
+  database_name = aws_glue_catalog_database.this[0].name
+  table_type    = "EXTERNAL_TABLE"
+
+  parameters = merge(
+    {
+      EXTERNAL              = "TRUE"
+      "parquet.compression" = "SNAPPY"
+    },
+    var.partition_projection ? {
+      "projection.enabled"                  = "true"
+      "projection.fecha_dato.type"          = "date"
+      "projection.fecha_dato.format"        = "yyyy-MM-dd"
+      "projection.fecha_dato.range"         = "${var.primer_corte},NOW"
+      "projection.fecha_dato.interval"      = "1"
+      "projection.fecha_dato.interval.unit" = "MONTHS"
+      "storage.location.template"           = "s3://${local.bucket_id}/${var.conversion_prefix}fecha_dato=$${fecha_dato}/"
+    } : {}
+  )
+
+  partition_keys {
+    name = "fecha_dato"
+    type = "string"
+  }
+
+  storage_descriptor {
+    location      = "s3://${local.bucket_id}/${var.conversion_prefix}"
+    input_format  = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
+    output_format = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
+
+    ser_de_info {
+      serialization_library = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+    }
+
+    dynamic "columns" {
+      for_each = local.columnas_conversion
+      content {
+        name = columns.value.name
+        type = columns.value.type
+      }
+    }
+  }
+}

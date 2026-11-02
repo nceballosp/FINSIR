@@ -44,6 +44,8 @@ data "aws_iam_policy_document" "glue_bucket" {
       "${local.bucket_arn}/${var.silver_prefix}*",
       "${local.bucket_arn}/${var.rechazados_prefix}*",
       "${local.bucket_arn}/${var.calidad_prefix}*",
+      "${local.bucket_arn}/${var.gold_prefix}*",
+      "${local.bucket_arn}/${var.conversion_prefix}*",
       "${local.bucket_arn}/tmp/*",
     ]
   }

@@ -43,5 +43,5 @@ def test_settings_valid_dev_mode():
         AUTH_DEV_SECRET="secret",
         _env_file=None,
     )
-    assert settings.athena_table == "silver_train"
+    assert settings.athena_table == "gold_train"
     assert settings.aws_region == "us-east-1"

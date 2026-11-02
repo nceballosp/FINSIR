@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.domain.entities import SILVER_COLUMN_NAMES, ClientRecord, MonthPage
+from app.domain.entities import GOLD_TRAIN_COLUMN_NAMES, ClientRecord, MonthPage
 from app.domain.errors import (
     ClientNotFoundError,
     DomainError,
@@ -14,7 +14,7 @@ from app.domain.errors import (
 def test_as_dict_preserves_nulls_and_schema_order():
     record = ClientRecord(ncodpers=1, fecha_dato="2015-01-28", values={"sexo": None})
     flat = record.as_dict()
-    assert list(flat.keys()) == list(SILVER_COLUMN_NAMES)
+    assert list(flat.keys()) == list(GOLD_TRAIN_COLUMN_NAMES)
     assert flat["sexo"] is None
     assert flat["ncodpers"] == 1
     assert flat["fecha_dato"] == "2015-01-28"

@@ -11,7 +11,12 @@ locals {
   database_name = var.database_name != "" ? var.database_name : replace(var.project, "-", "_")
   glue_role_arn = var.existing_glue_role_arn != "" ? var.existing_glue_role_arn : aws_iam_role.glue[0].arn
 
-  script_key = "${var.scripts_prefix}limpieza_train.py"
+  script_key      = "${var.scripts_prefix}limpieza_train.py"
+  gold_job_name   = "${var.project}-gold-train"
+  gold_script_key = "${var.scripts_prefix}gold_train.py"
+
+  conversion_job_name   = "${var.project}-gold-segment-conversion"
+  conversion_script_key = "${var.scripts_prefix}gold_segment_conversion.py"
 
   # Las columnas del CSV crudo, todas en texto (capa bronze)
   columnas_crudo = [
@@ -129,5 +134,35 @@ locals {
     { name = "metrica", type = "string" },
     { name = "detalle", type = "string" },
     { name = "filas", type = "bigint" },
+  ]
+
+  # gold_train: must match gold_columns() in glue/gold_train.py
+  silver_types  = { for c in local.columnas_silver : c.name => c.type }
+  gold_products = [for c in local.columnas_silver : c.name if startswith(c.name, "ind_") && endswith(c.name, "ult1")]
+  gold_profile = [
+    "ind_empleado", "pais_residencia", "sexo", "age", "antiguedad", "ind_nuevo",
+    "indrel", "indrel_1mes", "tiprel_1mes", "indresi", "indext", "canal_entrada",
+    "indfall", "cod_prov", "ind_actividad_cliente", "renta", "segmento",
+  ]
+  gold_lags = [1, 3, 6]
+
+  columnas_gold = concat(
+    [{ name = "ncodpers", type = "bigint" }, { name = "month_of_year", type = "int" }],
+    [for c in local.gold_profile : { name = c, type = local.silver_types[c] }],
+    [for p in local.gold_products : { name = p, type = "int" }],
+    flatten([for k in local.gold_lags : [for p in local.gold_products : { name = "${p}_lag${k}", type = "int" }]]),
+    [for p in local.gold_products : { name = "added_${p}", type = "int" }],
+    [for c in ["n_products", "n_products_added", "n_products_dropped", "has_previous_month"] : { name = c, type = "int" }],
+    [for p in local.gold_products : { name = "label_next_${p}", type = "int" }],
+    [{ name = "label_next_n_added", type = "int" }],
+  )
+
+  # gold_segment_conversion: must match OUTPUT_COLUMNS in gold_segment_conversion.py
+  columnas_conversion = [
+    { name = "segmento", type = "string" },
+    { name = "product", type = "string" },
+    { name = "eligible", type = "bigint" },
+    { name = "adopters", type = "bigint" },
+    { name = "conversion_rate", type = "double" },
   ]
 }

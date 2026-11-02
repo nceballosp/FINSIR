@@ -1,4 +1,4 @@
-"""Athena-backed :class:`SilverRepository` using boto3.
+"""Athena-backed :class:`GoldTrainRepository` using boto3.
 
 Isolation: all boto3/Athena details live here. Infrastructure failures are
 translated into :class:`RepositoryError` and invalid inputs into
@@ -7,8 +7,10 @@ translated into :class:`RepositoryError` and invalid inputs into
 SQL-injection defense: the boto3 Athena API has no bind-parameter support for
 ad-hoc queries, so strict typed validation is the control. ``ncodpers`` must be
 an integer and ``fecha_dato`` must match ``YYYY-MM-DD``; the sort column is
-whitelisted against the known silver schema. Values are embedded only after
+whitelisted against the known gold_train schema. Values are embedded only after
 passing validation.
+
+``fecha_dato`` is a string partition key, so it is compared to a string literal.
 """
 
 from __future__ import annotations
@@ -19,20 +21,20 @@ from typing import Any, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.domain.entities import SILVER_COLUMN_NAMES, ClientRecord, MonthPage
+from app.domain.entities import GOLD_TRAIN_COLUMN_NAMES, ClientRecord, MonthPage
 from app.domain.errors import InvalidQueryError, RepositoryError
-from app.use_cases.ports import SilverRepository
+from app.use_cases.ports import GoldTrainRepository
 
 FECHA_DATO_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TERMINAL_FAILURE_STATES = frozenset({"FAILED", "CANCELLED"})
 SUCCEEDED_STATE = "SUCCEEDED"
 POLL_INTERVAL_SECONDS = 0.5
 MAX_POLL_ATTEMPTS = 120
-_SORTABLE_COLUMNS = frozenset(SILVER_COLUMN_NAMES)
+_SORTABLE_COLUMNS = frozenset(GOLD_TRAIN_COLUMN_NAMES)
 
 
-class AthenaSilverRepository(SilverRepository):
-    """Reads ``silver_train`` from Athena via boto3."""
+class AthenaGoldTrainRepository(GoldTrainRepository):
+    """Reads ``gold_train`` from Athena via boto3."""
 
     def __init__(
         self,
@@ -53,7 +55,7 @@ class AthenaSilverRepository(SilverRepository):
         self._max_poll_attempts = max_poll_attempts
 
     def get_client_records(self, ncodpers: int) -> list[ClientRecord]:
-        """Return all silver records for a client, ordered by month."""
+        """Return all gold_train records for a client, ordered by month."""
         safe_id = self._validate_ncodpers(ncodpers)
         query = (
             f"SELECT * FROM {self._qualified_table} "
@@ -61,18 +63,6 @@ class AthenaSilverRepository(SilverRepository):
         )
         rows = self._run_query(query)
         return [self._to_record(row) for row in rows]
-
-    def get_client_latest(self, ncodpers: int) -> Optional[ClientRecord]:
-        """Return the client's most recent record, or ``None`` if none."""
-        safe_id = self._validate_ncodpers(ncodpers)
-        query = (
-            f"SELECT * FROM {self._qualified_table} "
-            f"WHERE ncodpers = {safe_id} ORDER BY fecha_dato DESC LIMIT 1"
-        )
-        rows = self._run_query(query)
-        if not rows:
-            return None
-        return self._to_record(rows[0])
 
     def list_by_month(
         self,
@@ -84,10 +74,10 @@ class AthenaSilverRepository(SilverRepository):
         """Return a paginated page of records for a single month.
 
         Pagination uses a separate ``COUNT(*)`` plus a ``LIMIT/OFFSET`` query.
-        Accepted trade-offs for the append-mostly silver table:
+        Accepted trade-offs for the batch-rebuilt gold table:
         - ``total`` and the page come from two queries, so they can disagree
-          under concurrent writes. The silver table is batch-appended, so this
-          window is effectively absent in practice.
+          while the gold job is rewriting the table. Outside a job run this
+          window is absent.
         - ``OFFSET`` re-scans from the start on deep pages. Fine at the current
           per-month scale; revisit (e.g. keyset pagination) if month listings
           grow large or are requested frequently.
@@ -101,7 +91,7 @@ class AthenaSilverRepository(SilverRepository):
         total = self._count_for_month(safe_date)
         query = (
             f"SELECT * FROM {self._qualified_table} "
-            f"WHERE fecha_dato = DATE '{safe_date}'{order_clause} "
+            f"WHERE fecha_dato = '{safe_date}'{order_clause} "
             f"LIMIT {safe_size} OFFSET {offset}"
         )
         rows = self._run_query(query)
@@ -117,7 +107,7 @@ class AthenaSilverRepository(SilverRepository):
     def _count_for_month(self, fecha_dato: str) -> int:
         query = (
             f"SELECT COUNT(*) AS total FROM {self._qualified_table} "
-            f"WHERE fecha_dato = DATE '{fecha_dato}'"
+            f"WHERE fecha_dato = '{fecha_dato}'"
         )
         rows = self._run_query(query)
         if not rows:
@@ -217,7 +207,7 @@ class AthenaSilverRepository(SilverRepository):
         ncodpers = int(raw_id) if raw_id not in (None, "") else None
         values = {
             name: row.get(name)
-            for name in SILVER_COLUMN_NAMES
+            for name in GOLD_TRAIN_COLUMN_NAMES
             if name not in ("ncodpers", "fecha_dato")
         }
         return ClientRecord(

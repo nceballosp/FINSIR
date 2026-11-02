@@ -45,7 +45,7 @@ variable "data_bucket_name" {
 }
 
 variable "athena_database" {
-  description = "Glue catalog database with the silver tables"
+  description = "Glue catalog database with the gold tables"
   type        = string
   default     = "finsir"
 }
@@ -63,9 +63,9 @@ variable "athena_results_prefix" {
 }
 
 variable "athena_table" {
-  description = "Silver table the API reads (ATHENA_TABLE env value)"
+  description = "Gold table the API reads (ATHENA_TABLE env value)"
   type        = string
-  default     = "silver_train"
+  default     = "gold_train"
 }
 
 # --- Fargate sizing ---------------------------------------------------------
@@ -115,7 +115,7 @@ variable "auth_dev_secret" {
 variable "auth_required_scope" {
   description = "Scope required to call the data endpoints"
   type        = string
-  default     = "silver:read"
+  default     = "gold:read"
 }
 
 # --- Service metadata -------------------------------------------------------

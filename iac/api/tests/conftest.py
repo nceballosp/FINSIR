@@ -13,15 +13,15 @@ from app.config import Settings
 from app.container import build_container_from_repository
 from app.domain.entities import ClientRecord, MonthPage
 from app.domain.errors import InvalidQueryError, RepositoryError
-from app.use_cases.ports import SilverRepository
+from app.use_cases.ports import GoldTrainRepository
 
 DEV_SECRET = "test-secret-not-a-real-credential"
 AUDIENCE = "finsir-clients"
 ISSUER = "finsir-tests"
-REQUIRED_SCOPE = "silver:read"
+REQUIRED_SCOPE = "gold:read"
 
 
-class FakeSilverRepository(SilverRepository):
+class FakeGoldTrainRepository(GoldTrainRepository):
     """In-memory repository for tests. Optionally raises to exercise errors."""
 
     def __init__(
@@ -39,13 +39,6 @@ class FakeSilverRepository(SilverRepository):
         if not isinstance(ncodpers, int) or isinstance(ncodpers, bool):
             raise InvalidQueryError("ncodpers must be an integer")
         return list(self._records_by_client.get(ncodpers, []))
-
-    def get_client_latest(self, ncodpers: int) -> Optional[ClientRecord]:
-        self._maybe_raise()
-        records = self._records_by_client.get(ncodpers, [])
-        if not records:
-            return None
-        return sorted(records, key=lambda record: record.fecha_dato or "")[-1]
 
     def list_by_month(
         self,
@@ -87,11 +80,13 @@ def dev_settings() -> Settings:
 
 
 @pytest.fixture
-def fake_repository() -> FakeSilverRepository:
+def fake_repository() -> FakeGoldTrainRepository:
     """A fake repository seeded with one client and one month."""
-    record_jan = make_client_record(1, "2015-01-28", sexo="V", age="35")
+    record_jan = make_client_record(
+        1, "2015-01-28", sexo="V", age="35", label_next_ind_cco_fin_ult1="1"
+    )
     record_feb = make_client_record(1, "2015-02-28", sexo="V", age=None)
-    return FakeSilverRepository(
+    return FakeGoldTrainRepository(
         records_by_client={1: [record_jan, record_feb]},
         records_by_month={
             "2015-01-28": [record_jan, make_client_record(2, "2015-01-28")]
@@ -123,7 +118,7 @@ def token_without_scope() -> str:
 def build_test_client(dev_settings: Settings):
     """Factory building a TestClient around a given repository."""
 
-    def _build(repository: SilverRepository) -> TestClient:
+    def _build(repository: GoldTrainRepository) -> TestClient:
         container = build_container_from_repository(repository)
         app = create_app(settings=dev_settings, container=container)
         return TestClient(app)

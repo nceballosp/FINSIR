@@ -42,7 +42,7 @@ aws ec2 describe-network-interfaces --network-interface-ids "$ENI" \
 ## Call the API
 
 `/health` is open; `/v1/*` needs a token signed with your `auth_dev_secret` and a
-`silver:read` scope.
+`gold:read` scope.
 
 ```bash
 IP=<public-ip-from-above>
@@ -52,11 +52,11 @@ curl "http://$IP:8080/health"
 python - <<'PY'
 import jwt, time
 secret = "<your auth_dev_secret>"
-print(jwt.encode({"sub":"demo","scope":"silver:read",
+print(jwt.encode({"sub":"demo","scope":"gold:read",
                   "exp":int(time.time())+3600}, secret, algorithm="HS256"))
 PY
 TOKEN=<token>
-curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/clients/1"
+curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/gold/train/clients/1"
 ```
 
 Traffic is plain HTTP on port 8080 (no TLS). The token needs no `aud`/`iss`
