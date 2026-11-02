@@ -1,158 +1,135 @@
 # FINSIR API (silver service)
 
-FastAPI service that exposes the FINSIR **silver** data over HTTPS, querying
-Athena (`silver_train`) and reading table metadata from the Glue Data Catalog.
-It is deployed on **AWS App Runner** ("Finsir Service" in the architecture
-diagram). The Streamlit client calls it over HTTPS. Authentication is validated
-**inside FastAPI** with a bearer JWT — there is **no API Gateway**.
+FastAPI service that serves the FINSIR silver data. It queries Athena
+(`silver_train`) and reads table info from the Glue catalog. It runs on AWS ECS
+Fargate at `http://<task-ip>:8080` (plain HTTP, no load balancer). A bearer JWT is
+checked inside FastAPI — there's no API Gateway. Gold endpoints come later.
 
-Gold endpoints are future work; this service serves the silver layer only.
-
-## Architecture (hexagonal / ports & adapters)
+## How the code is organized (hexagonal)
 
 Dependencies point inward: `adapters -> use cases -> domain`.
 
 ```
 app/
-  domain/            Pure entities (ClientRecord, MonthPage) + typed errors. No framework imports.
+  domain/            Entities + typed errors. No framework imports.
   use_cases/         SilverRepository port + the three use cases.
   adapters/
-    driving/http/    FastAPI app factory, routers, auth, correlation, JSON logging, exception handler.
-    driven/athena/   Athena-backed SilverRepository (boto3), input validation, error translation.
-  config.py          pydantic-settings (env vars).
-  container.py       DI wiring (Athena adapter -> use cases).
-  main.py            ASGI entrypoint (uvicorn app.main:app).
+    driving/http/    FastAPI app, routers, auth, logging, error handling.
+    driven/athena/   Athena-backed repository (boto3), validation, error mapping.
+  config.py          Settings from env vars.
+  container.py       Wires the Athena adapter into the use cases.
+  main.py            Entry point (uvicorn app.main:app).
 ```
 
-The boto3/Athena details live only in the driven adapter, behind the
-`SilverRepository` port, so tests swap in a fake repository with no AWS calls.
+All boto3/Athena code lives behind the `SilverRepository` port, so tests use a
+fake repository and make no AWS calls.
 
 ## Endpoints
 
-| Method | Path                              | Auth | Description                     | Status codes                 |
-| ------ | --------------------------------- | ---- | ------------------------------- | ---------------------------- |
-| GET    | `/health`                         | no   | Liveness probe for App Runner   | 200                          |
-| GET    | `/v1/clients/{ncodpers}`          | yes  | A client's silver records       | 200, 401, 403, 404, 422, 500 |
-| GET    | `/v1/clients/{ncodpers}/latest`   | yes  | The client's most recent record | 200, 401, 403, 404, 422, 500 |
-| GET    | `/v1/months/{fecha_dato}/clients` | yes  | Paginated clients for a month   | 200, 401, 403, 422, 500      |
+| Method | Path                              | Auth | What it returns                 |
+| ------ | --------------------------------- | ---- | ------------------------------- |
+| GET    | `/health`                         | no   | Health check (used by ECS)      |
+| GET    | `/v1/clients/{ncodpers}`          | yes  | A client's silver records       |
+| GET    | `/v1/clients/{ncodpers}/latest`   | yes  | The client's latest record      |
+| GET    | `/v1/months/{fecha_dato}/clients` | yes  | Clients for a month (paginated) |
 
-Query params for the month listing: `page` (>= 1), `size` (1..200), `sort`
-(whitelisted silver column). Successful payloads are wrapped in `data`; errors
-use a stable envelope (`error.code`, `error.message`, `correlationId`) and never
-leak internal details or stack traces.
-
-### Examples
+Month listing params: `page` (>= 1), `size` (1..200), `sort` (an allowed column).
+Success responses wrap data in `data`; errors use `{error.code, error.message,
+correlationId}` and never leak internals.
 
 ```bash
 TOKEN="<bearer-jwt>"
-curl -H "Authorization: Bearer $TOKEN" https://<service-url>/v1/clients/1
-curl -H "Authorization: Bearer $TOKEN" https://<service-url>/v1/clients/1/latest
-curl -H "Authorization: Bearer $TOKEN" \
-  "https://<service-url>/v1/months/2015-01-28/clients?page=1&size=50&sort=ncodpers"
+BASE="http://<task-ip>:8080"
+curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/clients/1"
+curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/clients/1/latest"
+curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/months/2015-01-28/clients?page=1&size=50"
 ```
 
-## Auth model
+## Auth
 
-A FastAPI dependency validates a bearer JWT on every `/v1` route (`/health` is
-open). Issuer, audience, and signing material come from environment variables;
-**no secret is hardcoded**.
+Every `/v1` route needs a bearer JWT (`/health` is open). Nothing is hardcoded —
+it all comes from env vars.
 
-- **Production**: RS256, keys fetched from `AUTH_JWKS_URL`, verifying
-  `AUTH_AUDIENCE` and `AUTH_ISSUER`. An `AUTH_REQUIRED_SCOPE` gates the data
-  endpoints. RS256 verification relies on the pinned `cryptography` dependency
-  (installed via `requirements.txt`).
-- **Local/dev**: set `IS_AUTH_DEV_MODE=true` and `AUTH_DEV_SECRET=<dev-secret>`
-  to validate HS256 tokens without committing any secret.
+- **Dev**: `IS_AUTH_DEV_MODE=true` + `AUTH_DEV_SECRET` → checks HS256 tokens. This
+  is what the ECS deploy uses.
+- **Prod**: RS256 with keys from `AUTH_JWKS_URL`, checking `AUTH_AUDIENCE` and
+  `AUTH_ISSUER`.
 
-Missing/invalid token -> `401`; insufficient scope -> `403`. The token is never
-logged.
+Missing/bad token → 401; wrong scope → 403. The token is never logged.
 
-## Required environment variables
+## Environment variables
 
-| Variable                                                   | Required | Purpose                                                          |
-| ---------------------------------------------------------- | -------- | ---------------------------------------------------------------- |
-| `ATHENA_DATABASE`                                          | yes      | Glue catalog database (e.g. `finsir`)                            |
-| `ATHENA_WORKGROUP`                                         | yes      | Athena workgroup                                                 |
-| `ATHENA_OUTPUT`                                            | yes      | S3 URI for Athena results (e.g. `s3://<bucket>/athena-results/`) |
-| `ATHENA_TABLE`                                             | no       | Silver table (default `silver_train`)                            |
-| `AWS_REGION`                                               | no       | AWS region (default `us-east-1`)                                 |
-| `AUTH_ISSUER`                                              | prod     | Expected `iss` claim                                             |
-| `AUTH_AUDIENCE`                                            | prod     | Expected `aud` claim                                             |
-| `AUTH_JWKS_URL`                                            | prod     | JWKS endpoint (RS256)                                            |
-| `AUTH_REQUIRED_SCOPE`                                      | no       | Scope required for data endpoints                                |
-| `IS_AUTH_DEV_MODE`                                         | no       | `true` enables local HS256 validation                            |
-| `AUTH_DEV_SECRET`                                          | dev      | HS256 secret (dev mode only)                                     |
-| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no       | Log metadata                                                     |
+| Variable                                                   | Needed | Purpose                               |
+| ---------------------------------------------------------- | ------ | ------------------------------------- |
+| `ATHENA_DATABASE`                                          | yes    | Glue database (e.g. `finsir`)         |
+| `ATHENA_WORKGROUP`                                         | yes    | Athena workgroup                      |
+| `ATHENA_OUTPUT`                                            | yes    | S3 URI for Athena results             |
+| `ATHENA_TABLE`                                             | no     | Silver table (default `silver_train`) |
+| `AWS_REGION`                                               | no     | Region (default `us-east-1`)          |
+| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod   | RS256 token checks                    |
+| `AUTH_REQUIRED_SCOPE`                                      | no     | Scope needed for data routes          |
+| `IS_AUTH_DEV_MODE`                                         | no     | `true` turns on HS256 dev mode        |
+| `AUTH_DEV_SECRET`                                          | dev    | HS256 secret (dev mode)               |
+| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no     | Log metadata                          |
 
-In dev mode, `AUTH_DEV_SECRET` is required and the JWKS/audience/issuer are not;
-in production the reverse holds. `Settings` fails fast if required values are
-missing.
+Dev mode needs `AUTH_DEV_SECRET`; prod needs the JWKS/audience/issuer. The app
+fails fast if a required value is missing.
 
 ## Run locally
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-
 export ATHENA_DATABASE=finsir ATHENA_WORKGROUP=finsir
 export ATHENA_OUTPUT=s3://finsir-<account-id>/athena-results/
 export IS_AUTH_DEV_MODE=true AUTH_DEV_SECRET=dev-secret AUTH_REQUIRED_SCOPE=silver:read
-# AWS credentials with Athena/Glue/S3 access must be available in the environment.
-
-uvicorn app.main:app --host 0.0.0.0 --port 8080
+uvicorn app.main:app --host 0.0.0.0 --port 8080   # needs AWS creds for the data routes
 ```
 
-## Run tests
+## Tests
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
 pytest --cov=app --cov-report=term-missing
 ```
 
-Coverage floors (enforced minimums): domain > 90%, use cases >= 85%,
-adapters >= 70%, global >= 80%. Tests use a fake `SilverRepository` and a fake
-boto3 client — no real AWS calls.
+Coverage floors: domain > 90%, use cases >= 85%, adapters >= 70%, global >= 80%.
+Tests use a fake repository and fake boto3 — no real AWS.
 
-## Build and push the image to ECR
+## Build and push the image
+
+The ECS task pulls from the `finsir-api` ECR repo, so build and push first:
 
 ```bash
-cd terraform
-terraform init && terraform apply   # creates the ECR repo (and the service)
-ECR_URL=$(terraform output -raw ecr_repository_url)
-AWS_REGION=us-east-1
-
-aws ecr get-login-password --region $AWS_REGION \
+ECR_URL="663505294799.dkr.ecr.us-east-1.amazonaws.com/finsir-api"   # use your account's URL
+aws --profile terraform ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin "${ECR_URL%/*}"
-
-cd ..
-docker build -t "$ECR_URL:latest" .
+docker build -t "$ECR_URL:latest" .    # run from iac/api
 docker push "$ECR_URL:latest"
 ```
 
-Then re-run `terraform apply` (or redeploy the App Runner service) so it pulls
-the new image.
+If the repo doesn't exist:
+`aws --profile terraform ecr create-repository --repository-name finsir-api --region us-east-1`.
+Keep `ECR_URL` set in the same shell and quote `:latest`. After a later push,
+re-run `terraform apply` in `terraform-ecs/` so the service pulls the new image.
 
-## Deploy (Terraform)
+## Deploy
 
-`terraform/` is a self-contained root that provisions:
-
-- an **ECR repository** for the image,
-- an App Runner **instance role** (least privilege: `athena:StartQueryExecution`
-  / `GetQueryExecution` / `GetQueryResults`, `glue:GetTable` / `GetDatabase` /
-  `GetPartitions`, S3 read on the data bucket + read/write on the
-  `athena-results/` prefix),
-- an App Runner **access role** to pull from ECR,
-- the **App Runner service** (port 8080) with the env vars above.
-
-It references the data platform's bucket/database/workgroup through variables —
-no account-specific values are hardcoded. Provider `aws ~> 5.80`, Terraform
-`>= 1.5`, region `us-east-1`.
+The API is deployed by the Terraform in `terraform-ecs/` (ECS cluster, Fargate
+task + service on port 8080, task/execution roles, security group, log group). It
+reuses the existing ECR repo and reads the data platform's bucket/database/
+workgroup from variables.
 
 ```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars   # set data_bucket_name, auth_* , etc.
-terraform init
-terraform apply
+cd terraform-ecs
+cp terraform.tfvars.example terraform.tfvars   # set auth_dev_secret (>= 16 chars)
+AWS_PROFILE=terraform terraform init
+AWS_PROFILE=terraform terraform apply
 ```
 
-Outputs: `service_url`, `ecr_repository_url`, `instance_role_arn`.
+See [`terraform-ecs/README.md`](terraform-ecs/README.md) for finding the public
+IP, making a token, and tearing it down.
+
+> The old App Runner Terraform root was removed (App Runner isn't available on
+> this account). It left two unused, free IAM roles (`finsir-api-instance-role`,
+> `finsir-api-access-role`) — delete them by hand if you want.

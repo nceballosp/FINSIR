@@ -1,42 +1,32 @@
 # FINSIR API on ECS Fargate
 
-A self-contained Terraform root that runs the existing FINSIR API container
-(already in ECR) on ECS Fargate with a public IP and no load balancer. This is a
-sibling of the App Runner root (`iac/api/terraform/`); both roots coexist and use
-separate state and distinct resource names.
+Terraform that runs the FINSIR API container (already in ECR) on ECS Fargate with
+a public IP and no load balancer.
 
-## 1. What this provisions
+## What it creates
 
-- **ECS cluster** `finsir-api-cluster`.
-- **Fargate task definition** `finsir-api` — one container from the existing ECR
-  image (port 8080, `awslogs` log driver).
-- **ECS service** `finsir-api` — `desired_count = 1`, public IP, no ALB.
-- **Execution role** `finsir-api-exec-role` with the AWS-managed
-  `AmazonECSTaskExecutionRolePolicy` (ECR pull + log write).
-- **Task role** `finsir-api-task-role` with a least-privilege Athena/Glue/S3
-  inline policy (replicated from the App Runner root).
-- **Security group** `finsir-api-sg` — inbound TCP 8080 from `0.0.0.0/0`, all egress.
-- **CloudWatch log group** `/ecs/finsir-api`.
+- ECS cluster `finsir-api-cluster`
+- Fargate task `finsir-api` — the ECR image on port 8080, logs to CloudWatch
+- ECS service `finsir-api` — 1 task, public IP, no ALB
+- Execution role (lets ECS pull the image + write logs)
+- Task role (lets the app read Athena/Glue/S3, least privilege)
+- Security group — open on TCP 8080 to everyone
+- Log group `/ecs/finsir-api`
 
-It **reuses the existing ECR repository** (`finsir-api`) and does not create one.
-It does not touch the App Runner root or the data-platform root.
+It reuses the existing `finsir-api` ECR repo (doesn't create one).
 
-The ECS service is named `finsir-api` (not `finsir-service`); `finsir-service` is
-carried only in the `SERVICE_NAME` env var.
-
-## 2. Deploy
+## Deploy
 
 ```bash
 cd iac/api/terraform-ecs
-cp terraform.tfvars.example terraform.tfvars   # edit non-secret values
-export TF_VAR_auth_dev_secret="$(openssl rand -hex 24)"   # strong dev secret, not committed
+cp terraform.tfvars.example terraform.tfvars   # set auth_dev_secret (>= 16 chars)
 AWS_PROFILE=terraform terraform init
 AWS_PROFILE=terraform terraform apply
 ```
 
-## 3. Find the public IP
+## Find the public IP
 
-There is no stable endpoint (no ALB); the public IP changes on every redeploy.
+There's no fixed URL (no ALB); the IP changes on every redeploy.
 
 ```bash
 CLUSTER=$(terraform output -raw cluster_name)
@@ -49,41 +39,42 @@ aws ec2 describe-network-interfaces --network-interface-ids "$ENI" \
   --query 'NetworkInterfaces[0].Association.PublicIp' --output text
 ```
 
-`terraform output -raw public_ip_hint` reminds you to use this pipeline (the
-pipeline itself lives only here, to avoid drift).
+## Call the API
 
-## 4. Reach the API
-
-`/health` is open; `/v1/*` needs an HS256 bearer token.
+`/health` is open; `/v1/*` needs a token signed with your `auth_dev_secret` and a
+`silver:read` scope.
 
 ```bash
 IP=<public-ip-from-above>
 curl "http://$IP:8080/health"
 
-# Mint a dev HS256 token (secret must equal auth_dev_secret; scope must include silver:read)
+# Make a dev token (same secret as auth_dev_secret)
 python - <<'PY'
 import jwt, time
-secret = "<the same auth_dev_secret>"
+secret = "<your auth_dev_secret>"
 print(jwt.encode({"sub":"demo","scope":"silver:read",
-                  "iat":int(time.time()),"exp":int(time.time())+3600},
-                 secret, algorithm="HS256"))
+                  "exp":int(time.time())+3600}, secret, algorithm="HS256"))
 PY
 TOKEN=<token>
 curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/clients/1"
 ```
 
-Access is over **HTTP on port 8080** (no ALB/TLS).
+Traffic is plain HTTP on port 8080 (no TLS). The token needs no `aud`/`iss`
+because this deploy leaves `AUTH_AUDIENCE`/`AUTH_ISSUER` unset; if you set either,
+tokens must include matching claims or they get a 401.
 
-> Why no `aud`/`iss` in the token: this deploy runs dev mode with
-> `AUTH_AUDIENCE`/`AUTH_ISSUER` intentionally unset, so the API skips
-> audience/issuer verification and a token with only `sub`/`scope`/`iat`/`exp`
-> is accepted. If you later set `AUTH_AUDIENCE` or `AUTH_ISSUER`, this same
-> token will return 401 until it also carries matching `aud`/`iss` claims.
+## Tear down
 
-## 5. Caveats
+```bash
+AWS_PROFILE=terraform terraform destroy
+```
 
-Demo-grade: the SG opens `0.0.0.0/0:8080`, traffic is plaintext HTTP, and the
-public IP changes whenever the task is replaced. Hardening path (out of scope):
-front with an ALB for stable DNS + HTTPS, restrict the SG, and move
-`AUTH_DEV_SECRET` into Secrets Manager via the container `secrets` block,
-switching to production RS256/JWKS.
+Stops the Fargate task and removes everything above. The ECR repo survives (it's
+not managed here). For the full platform teardown (data included) see the
+repo-root README, "Tear down".
+
+## Heads up
+
+This is demo-grade: port 8080 is open to the world and traffic is plain HTTP. To
+harden it: put an ALB in front for a stable HTTPS URL, lock the security group
+down, and move the secret into Secrets Manager with production RS256 auth.

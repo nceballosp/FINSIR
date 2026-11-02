@@ -5,6 +5,7 @@ apm_modules/
 .kiro/
 context/
 .agents/
+.codex
 
 # Windows "mark of the web" artifacts (WSL)
 *:Zone.Identifier
@@ -65,3 +66,6 @@ Thumbs.db
 .idea/
 *.swp
 *~
+
+# Raw datasets (large; uploaded to S3 manually, not versioned)
+data/
