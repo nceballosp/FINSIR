@@ -282,19 +282,9 @@ deployments:
   - .
   active_owner: .
   content_hash: null
-- kind: uri
-  target: mcp
-  value: kaggle
-  runtime: kiro
-  scope: project
-  owners:
-  - .
-  active_owner: .
-  content_hash: null
 mcp_servers:
 - document-loader
 - engram
-- kaggle
 mcp_configs:
   document-loader:
     name: document-loader
@@ -321,21 +311,10 @@ mcp_configs:
     - mem_judge
     - mem_compare
     - mem_current_project
-  kaggle:
-    name: kaggle
-    transport: stdio
-    args:
-    - mcp-remote
-    - https://www.kaggle.com/mcp
-    - --header
-    - 'Authorization: Bearer ${KAGGLE_MCP_TOKEN}'
-    registry: false
-    command: npx
 mcp_target_servers:
   kiro:
   - document-loader
   - engram
-  - kaggle
 local_deployed_files:
 - .kiro/hooks/coding-engram-consumer-engram-save-on-stop-stop-1.json
 local_deployed_file_hashes:

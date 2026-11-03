@@ -18,7 +18,10 @@ locals {
         Parameters = {
           JobName = aws_glue_job.limpieza.name
         }
-        Next = "TablasGold"
+        # Descarta el output del Glue job para conservar el input original
+        # (trae gold_jobs); si no, el Map de abajo no encuentra $.gold_jobs.
+        ResultPath = null
+        Next       = "TablasGold"
       }
       TablasGold = {
         Type           = "Map"

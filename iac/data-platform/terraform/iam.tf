@@ -49,6 +49,14 @@ data "aws_iam_policy_document" "glue_bucket" {
       "${local.bucket_arn}/tmp/*",
     ]
   }
+
+  # El conector S3 de Spark/Hadoop crea marcadores de carpeta "<dir>_$folder$"
+  # en la raiz del bucket (p. ej. silver_$folder$, gold_$folder$) al escribir
+  # en esos prefijos; no caen en los patrones de arriba y daban AccessDenied.
+  statement {
+    actions   = ["s3:PutObject", "s3:DeleteObject"]
+    resources = ["${local.bucket_arn}/*_$folder$"]
+  }
 }
 
 resource "aws_iam_role_policy" "glue_bucket" {
