@@ -46,11 +46,15 @@ if ($CreateBucket -eq "true") {
   do { $BucketName = Ask "Existing bucket name" "" } while ([string]::IsNullOrWhiteSpace($BucketName))
 }
 
+# EventBridge schedule: off by default (the Step Functions still runs on demand).
+$ScheduleEnabled = AskYesNo "Enable the EventBridge daily schedule now? (no = keep it off, run by hand)" "n"
+
 @"
-region        = "$Region"
-project       = "$Project"
-create_bucket = $CreateBucket
-bucket_name   = "$BucketName"
+region           = "$Region"
+project          = "$Project"
+create_bucket    = $CreateBucket
+bucket_name      = "$BucketName"
+schedule_enabled = $ScheduleEnabled
 "@ | Set-Content -Encoding ascii (Join-Path $TfDir "terraform.tfvars")
 Write-Host "Wrote $TfDir\terraform.tfvars"
 
@@ -70,11 +74,35 @@ if ((AskYesNo "Upload the raw CSV now?" "n") -eq "true") {
   }
 }
 
-if ((AskYesNo "Start the cleaning Glue job now?" "n") -eq "true") {
-  aws glue start-job-run --job-name "$Project-limpieza-train" --region $Region
-  Write-Host "Cleaning job started. Build the gold tables only after it SUCCEEDED:"
-  Write-Host "  aws glue start-job-run --job-name $Project-gold-train --region $Region"
-  Write-Host "  aws glue start-job-run --job-name $Project-gold-segment-conversion --region $Region"
+# Run the whole batch via Step Functions: cleaning -> gold tables in parallel.
+try { $SmArn = (terraform output -raw state_machine_arn).Trim() } catch { $SmArn = "" }
+if ((AskYesNo "Start the batch now (Step Functions: cleaning -> gold tables)?" "n") -eq "true") {
+  if ($SmArn) {
+    $GoldInput = "{`"gold_jobs`":[`"$Project-gold-train`",`"$Project-gold-segment-conversion`"]}"
+    $ExecArn = (aws stepfunctions start-execution --state-machine-arn $SmArn `
+      --input $GoldInput --region $Region --query executionArn --output text).Trim()
+    Write-Host "Batch started: $ExecArn"
+    Write-Host "Follow it with:"
+    Write-Host "  aws stepfunctions describe-execution --execution-arn $ExecArn --region $Region --query status"
+  } else {
+    Write-Host "No orchestration found (create_orchestration is false?). Skipping."
+  }
 }
+
+# Show how to run the batch again and the schedule state.
+Write-Host ""
+Write-Host "================ FINSIR batch orchestration ================"
+if ($ScheduleEnabled -eq "true") {
+  Write-Host "EventBridge schedule: ENABLED (cron default: 06:00 UTC daily)."
+} else {
+  Write-Host "EventBridge schedule: DISABLED. Run the batch by hand with the command below."
+}
+try { $RunBatch = (terraform output -raw run_batch).Trim() } catch { $RunBatch = "" }
+if ($RunBatch) {
+  Write-Host "Run the batch (cleaning -> gold tables in parallel):"
+  Write-Host "  $RunBatch"
+}
+Write-Host "Enable/disable the schedule: set schedule_enabled in terraform.tfvars and re-apply."
+Write-Host "============================================================"
 
 Write-Host "Done."

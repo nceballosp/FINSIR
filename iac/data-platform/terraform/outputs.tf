@@ -77,3 +77,18 @@ output "athena_workgroup" {
   description = "Grupo de trabajo de Athena (vacio si create_athena es false)"
   value       = var.create_athena ? aws_athena_workgroup.this[0].name : ""
 }
+
+output "state_machine_arn" {
+  description = "Step Functions que orquesta el batch (vacio si create_orchestration es false)"
+  value       = var.create_orchestration ? aws_sfn_state_machine.batch[0].arn : ""
+}
+
+output "run_batch" {
+  description = "Comando para correr la orquestacion a mano (limpieza -> jobs gold en paralelo)"
+  value = var.create_orchestration ? join(" ", [
+    "aws stepfunctions start-execution",
+    "--state-machine-arn ${aws_sfn_state_machine.batch[0].arn}",
+    "--input '${jsonencode({ gold_jobs = local.gold_job_names })}'",
+    "--region ${var.region}",
+  ]) : ""
+}

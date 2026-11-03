@@ -265,11 +265,77 @@ La carpeta de salida gold es `gold_prefix` (default `gold/train/`).
 
 La región por defecto es `us-east-1`; `aws ~> 5.80`, Terraform `>= 1.5`.
 
+## Orquestación (EventBridge → Step Functions → Glue)
+
+El batch puede correr solo. Terraform crea una Step Functions que ejecuta la
+limpieza y, cuando termina, lanza **todos los jobs gold en paralelo**; una regla
+de EventBridge la dispara según un horario.
+
+- `finsir-batch-diario` (Step Functions): estado `Limpieza` (síncrono) → estado
+  `TablasGold`, un `Map` que corre en paralelo cada job de `local.gold_job_names`.
+- `finsir-pipeline-diario` (EventBridge): regla programada que arranca la Step
+  Functions y le pasa la lista de jobs gold como input.
+
+**Agregar una tabla gold nueva:** añade su job a `local.gold_job_names` en
+`main.tf`. El `Map` lo recoge solo; no hay que tocar la state machine.
+
+| Variable               | Default             | Qué hace                                           |
+| ---------------------- | ------------------- | -------------------------------------------------- |
+| `create_orchestration` | `true`              | Crear la Step Functions + la regla de EventBridge. |
+| `schedule_expression`  | `cron(0 6 * * ? *)` | Cuándo dispara (UTC). cron o rate.                 |
+| `schedule_enabled`     | `false`             | `false` deja la regla creada pero apagada.         |
+
+La regla nace **apagada** para que no corra sola hasta que lo decidas. El cron
+por defecto es `cron(0 6 * * ? *)` (06:00 UTC = 01:00 Colombia, diario).
+
+### Activar o desactivar el horario
+
+Con el script `deploy.sh` / `deploy.ps1`: te pregunta "Enable the EventBridge
+daily schedule now?" (default **no**). Responde según quieras.
+
+A mano: cambia `schedule_enabled` en `terraform.tfvars` y vuelve a aplicar.
+
+```bash
+# activar          -> schedule_enabled = true
+# desactivar       -> schedule_enabled = false
+terraform apply
+```
+
+También puedes encender/apagar la regla sin Terraform (se revierte en el próximo
+apply):
+
+```bash
+aws events disable-rule --name finsir-pipeline-diario --region us-east-1
+aws events enable-rule  --name finsir-pipeline-diario --region us-east-1
+```
+
+### Correr el batch a mano
+
+El `deploy.sh` / `deploy.ps1` te pregunta al final _"Start the batch now?"_: si
+dices que sí, arranca la Step Functions completa (limpieza → tablas gold en
+paralelo), no solo la limpieza. También imprime el comando listo para volver a
+correrlo. Y lo da Terraform:
+
+```bash
+terraform output -raw run_batch   # imprime el aws stepfunctions start-execution listo
+```
+
+Para seguir una ejecución:
+
+```bash
+aws stepfunctions describe-execution --execution-arn <arn-que-imprime-start-execution> \
+  --region us-east-1 --query status
+```
+
+> El patrón `.sync` de Glue hace que la Step Functions espere a que cada job
+> termine antes de seguir, así que la limpieza acaba `SUCCEEDED` antes de que
+> arranquen los jobs gold.
+
 ## Pendiente
 
-Las demás tablas gold (agregados del dashboard, resultados del test) y la
-orquestación (EventBridge → Step Functions → jobs de Glue) vienen después. Hoy
-los tres jobs de Glue se arrancan a mano, limpieza primero.
+Las demás tablas gold (agregados del dashboard, resultados del test) se agregan
+sumando su job a `local.gold_job_names`. El modelo de ML y el dashboard
+Streamlit vienen después.
 
 ## Tests
 

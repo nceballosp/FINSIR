@@ -54,11 +54,15 @@ else
   done
 fi
 
+# EventBridge schedule: off by default (the Step Functions still runs on demand).
+ask_yes_no SCHEDULE_ENABLED "Enable the EventBridge daily schedule now? (no = keep it off, run by hand)" "n"
+
 cat > terraform.tfvars <<EOF
-region        = "${REGION}"
-project       = "${PROJECT}"
-create_bucket = ${CREATE_BUCKET}
-bucket_name   = "${BUCKET_NAME}"
+region           = "${REGION}"
+project          = "${PROJECT}"
+create_bucket    = ${CREATE_BUCKET}
+bucket_name      = "${BUCKET_NAME}"
+schedule_enabled = ${SCHEDULE_ENABLED}
 EOF
 echo "Wrote $TF_DIR/terraform.tfvars"
 
@@ -81,12 +85,35 @@ if [[ "$DO_UPLOAD" == "true" ]]; then
   fi
 fi
 
-ask_yes_no DO_CLEAN "Start the cleaning Glue job now?" "n"
-if [[ "$DO_CLEAN" == "true" ]]; then
-  aws glue start-job-run --job-name "${PROJECT}-limpieza-train" --region "$REGION"
-  echo "Cleaning job started. Build the gold tables only after it SUCCEEDED:"
-  echo "  aws glue start-job-run --job-name ${PROJECT}-gold-train --region $REGION"
-  echo "  aws glue start-job-run --job-name ${PROJECT}-gold-segment-conversion --region $REGION"
+# Run the whole batch via Step Functions: cleaning -> gold tables in parallel.
+# run_batch is the ready-made "aws stepfunctions start-execution ..." command;
+# it always carries the current gold jobs, so just run it.
+RUN_BATCH="$(terraform output -raw run_batch 2>/dev/null || true)"
+ask_yes_no DO_BATCH "Start the batch now (Step Functions: cleaning -> gold tables)?" "n"
+if [[ "$DO_BATCH" == "true" ]]; then
+  if [[ -n "$RUN_BATCH" ]]; then
+    EXEC_ARN="$(eval "$RUN_BATCH --query executionArn --output text")"
+    echo "Batch started: $EXEC_ARN"
+    echo "Follow it with:"
+    echo "  aws stepfunctions describe-execution --execution-arn $EXEC_ARN --region $REGION --query status"
+  else
+    echo "No orchestration found (create_orchestration is false?). Skipping."
+  fi
 fi
+
+# Show how to run the batch again and the schedule state.
+echo
+echo "================ FINSIR batch orchestration ================"
+if [[ "$SCHEDULE_ENABLED" == "true" ]]; then
+  echo "EventBridge schedule: ENABLED (cron default: 06:00 UTC daily)."
+else
+  echo "EventBridge schedule: DISABLED. Run the batch by hand with the command below."
+fi
+if [[ -n "$RUN_BATCH" ]]; then
+  echo "Run the batch (cleaning -> gold tables in parallel):"
+  echo "  $RUN_BATCH"
+fi
+echo "Enable/disable the schedule: set schedule_enabled in terraform.tfvars and re-apply."
+echo "============================================================"
 
 echo "Done."

@@ -136,6 +136,26 @@ variable "partition_projection" {
   default     = true
 }
 
+# --- Orquestacion (Step Functions + EventBridge) ----------------------------
+
+variable "create_orchestration" {
+  description = "Crea la Step Functions que corre limpieza -> jobs gold, y la regla de EventBridge que la dispara"
+  type        = bool
+  default     = true
+}
+
+variable "schedule_expression" {
+  description = "Cuando dispara EventBridge la orquestacion. cron o rate; UTC. Ej: cron(0 6 * * ? *) = 6:00 UTC diario"
+  type        = string
+  default     = "cron(0 6 * * ? *)"
+}
+
+variable "schedule_enabled" {
+  description = "false deja la regla creada pero apagada (util mientras no quieras que corra sola)"
+  type        = bool
+  default     = false
+}
+
 variable "primer_corte" {
   description = "Primer fecha_dato de los datos, para la partition projection"
   type        = string

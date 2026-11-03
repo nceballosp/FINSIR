@@ -18,6 +18,13 @@ locals {
   conversion_job_name   = "${var.project}-gold-segment-conversion"
   conversion_script_key = "${var.scripts_prefix}gold_segment_conversion.py"
 
+  # Jobs gold que la orquestacion corre en paralelo tras la limpieza.
+  # Agregar una tabla gold nueva = anadir su nombre de job aqui.
+  gold_job_names = [
+    aws_glue_job.gold_train.name,
+    aws_glue_job.gold_segment_conversion.name,
+  ]
+
   # Las columnas del CSV crudo, todas en texto (capa bronze)
   columnas_crudo = [
     "fecha_dato",

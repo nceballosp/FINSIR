@@ -20,5 +20,12 @@ project = "finsir"
 # --- Sin Athena (por ejemplo, si la API lee el Parquet directo) ---
 # create_athena = false
 
+# --- Orquestacion del batch (Step Functions + EventBridge) ---
+# La Step Functions siempre se crea y se puede correr a mano.
+# schedule_enabled nace apagado: ponlo en true para que corra solo por horario.
+# schedule_enabled    = false
+# schedule_expression = "cron(0 6 * * ? *)"   # 06:00 UTC diario
+# create_orchestration = true                 # false no crea la orquestacion
+
 # Etiquetas para todos los recursos
 # tags = { owner = "equipo-datos", env = "prod" }

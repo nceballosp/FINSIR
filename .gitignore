@@ -66,6 +66,7 @@ Thumbs.db
 .idea/
 *.swp
 *~
+.vscode/
 
 # Raw datasets (large; uploaded to S3 manually, not versioned)
 data/
