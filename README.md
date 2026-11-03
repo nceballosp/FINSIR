@@ -4,225 +4,104 @@ Proyecto **FINSIR** para las materias Aprendizaje Automático, Almacenamiento y
 Procesamiento de Grandes Datos, y Visualización de Datos (Énfasis en Ciencia de
 Datos, EAFIT).
 
-FINSIR recommends financial products. Using the public _Santander Product
-Recommendation_ dataset (Kaggle), it predicts which of the 24 products a client
-is likely to get next month and returns a Top-K ranking (metric: MAP@7).
+FINSIR recomienda productos financieros. Usando el dataset público _Santander
+Product Recommendation_ (Kaggle), predice cuál de los 24 productos es más
+probable que un cliente adquiera el mes siguiente y devuelve un ranking Top-K
+(métrica: MAP@7).
 
-> More context: [`context/context.md`](context/context.md).
+> Más contexto: [`context/context.md`](context/context.md).
 
-## What's built so far
+## Qué hay construido
 
-Two pieces, both as Terraform on AWS (`us-east-1`, `aws ~> 5.80`, Terraform `>= 1.5`):
+Dos piezas, ambas con Terraform sobre AWS (`us-east-1`, `aws ~> 5.80`,
+Terraform `>= 1.5`):
 
-| Part          | Path                 | What it does                                                                                |
-| ------------- | -------------------- | ------------------------------------------------------------------------------------------- |
-| Data platform | `iac/data-platform/` | S3 lake + Glue cleaning and gold jobs + Athena tables (bronze/silver/rejected/quality/gold) |
-| API           | `iac/api/`           | FastAPI that reads the gold training table from Athena, runs on ECS Fargate                 |
+| Pieza               | Carpeta              | Qué hace                                                                          |
+| ------------------- | -------------------- | --------------------------------------------------------------------------------- |
+| Plataforma de datos | `iac/data-platform/` | Data lake en S3 + jobs de Glue (limpieza y gold) + tablas en Athena               |
+| API                 | `iac/api/`           | FastAPI que lee la tabla gold de entrenamiento desde Athena, corre en ECS Fargate |
 
-Still to do: the other gold tables, the ML model, and the Streamlit dashboard.
-The API serves the gold training table (`gold_train`) only.
-
-## How the data flows
+## Cómo fluyen los datos
 
 ```
 CSV (Kaggle)
-  └─▶ S3 Bronze (raw CSV)
-        └─▶ Glue/PySpark cleans + types it
+  └─▶ S3 Bronze (CSV crudo)
+        └─▶ Glue/PySpark limpia y tipa
               └─▶ S3 Silver (Parquet)
-                    └─▶ Glue/PySpark adds history + next-month labels
-                          └─▶ S3 Gold gold_train (Parquet)   ◀── the API reads this
-                                └─▶ [future] ML model → dashboard
-Athena can query every layer.
+                    └─▶ Glue/PySpark agrega historia + etiquetas del mes siguiente
+                          └─▶ S3 Gold gold_train (Parquet)   ◀── la API lee esto
 ```
 
-`gold_train` columns: [`iac/data-platform/README.md`](iac/data-platform/README.md#gold-layer-gold_train).
-
-## What you need
+## Qué necesitas
 
 - **Python** 3.10+
 - **Terraform** >= 1.5
-- **Docker** (to build the API image)
-- **AWS CLI** v2, logged in with a `terraform` profile that can use S3, Glue,
-  Athena, IAM, ECR and ECS in `us-east-1`
-- The Kaggle file **`train_ver2.csv`** (~2.3 GB). It is not in the repo (too big
-  for git). Download it and **put it at `data/train_ver2.csv`** — that exact path
-  is what step 2 uploads.
+- **Docker** (para construir la imagen de la API)
+- **AWS CLI** v2, con un perfil `terraform` que pueda usar S3, Glue, Athena,
+  IAM, ECR y ECS en `us-east-1`
+- El archivo de Kaggle **`train_ver2.csv`** (~2.3 GB). No está en el repo (muy
+  grande para git). Descárgalo y ponlo en **`data/train_ver2.csv`**.
 
-Secrets are never hardcoded. Copy each `*.tfvars.example` to `terraform.tfvars`
-(git-ignored) and fill in the values before running `apply`.
+Los secretos nunca se escriben en el código. Los scripts te los piden al vuelo
+y no los guardan en archivos versionados.
 
-## Deploy
+## Deploy (rápido, con los scripts)
 
-Deploy the data platform first, then the API (the API uses the platform's bucket
-and tables). Put `AWS_PROFILE=terraform` in front of each command, or run
-`export AWS_PROFILE=terraform` once.
+El deploy son dos pasos. Primero la plataforma de datos, luego la API (la API
+usa el bucket y las tablas de la plataforma). Cada script es interactivo: te
+pregunta los valores y hace el resto.
 
-The API runs on **ECS Fargate** with a public IP and no load balancer. The URL is
-`http://<task-ip>:8080` (plain HTTP; the `/v1/*` routes are still protected by a
-JWT). App Runner was the first choice but this account can't use it.
-
-### 1. Data platform
+### 1. Plataforma de datos
 
 ```bash
-cd iac/data-platform/terraform
-cp terraform.tfvars.example terraform.tfvars
-AWS_PROFILE=terraform terraform init
-AWS_PROFILE=terraform terraform apply
-BUCKET=$(AWS_PROFILE=terraform terraform output -raw bucket)
+# Linux / macOS
+./iac/data-platform/deploy.sh
+
+# Windows (PowerShell)
+./iac/data-platform/deploy.ps1
 ```
 
-### 2. Upload the CSV and run the cleaning job
+Te pregunta perfil, región y bucket; aplica Terraform y, si quieres, sube el
+CSV y arranca el job de limpieza. Deja que la limpieza termine (estado
+`SUCCEEDED`) antes de construir las tablas gold.
 
-Make sure the file is at `data/train_ver2.csv` first (see "What you need").
+### 2. API
 
 ```bash
-aws --profile terraform s3 cp data/train_ver2.csv "s3://$BUCKET/raw/train/train_ver2.csv"
-aws --profile terraform glue start-job-run --job-name finsir-limpieza-train --region us-east-1
+# Linux / macOS
+./iac/api/deploy.sh
+
+# Windows (PowerShell)
+./iac/api/deploy.ps1
 ```
 
-Wait until the job says `SUCCEEDED`:
+Te pregunta perfil, región, cuenta y el secreto de auth; opcionalmente
+construye y sube la imagen a ECR, aplica Terraform y al final imprime la URL
+pública (`http://<ip>:8080`), el secreto y el scope para generar tokens.
+
+> La IP es pública y cambia en cada redeploy. El script la resuelve y la
+> muestra al terminar.
+
+## Destroy (rápido, con el script)
+
+Un solo script derriba todo en el orden correcto (API primero, luego la
+plataforma). Te pregunta si borrar el data lake de S3 y la imagen de ECR.
 
 ```bash
-aws --profile terraform glue get-job-runs --job-name finsir-limpieza-train \
-  --region us-east-1 --max-items 1 --query 'JobRuns[0].JobRunState'
+# Linux / macOS
+./iac/destroy.sh
+
+# Windows (PowerShell)
+./iac/destroy.ps1
 ```
 
-After that, the `silver_train` table is ready in Athena. Then build the gold
-table and wait for `SUCCEEDED` the same way:
+Al terminar nada queda corriendo ni facturando (solo los datos de S3 que
+decidas conservar cuestan unos centavos).
 
-```bash
-aws --profile terraform glue start-job-run --job-name finsir-gold-train --region us-east-1
-aws --profile terraform glue get-job-runs --job-name finsir-gold-train \
-  --region us-east-1 --max-items 1 --query 'JobRuns[0].JobRunState'
-```
+## Correr la API local (sin desplegar en AWS)
 
-After that, the `gold_train` table is ready in Athena.
-
-### 3. Build and push the API image
-
-Put the account URL and the tag on their own lines, with **no trailing `#`
-comment** on the `ECR_URL=` line. A comment pasted after the assignment gets
-folded into the value by the shell and the tag is lost, so the push targets a
-bogus repo like `finsir-apiatest` ("repository ... does not exist"). Build and
-push the full `repo:tag` reference, never a bare `$ECR_URL`:
-
-```bash
-cd iac/api                 # the Dockerfile is here
-ECR_URL="663505294799.dkr.ecr.us-east-1.amazonaws.com/finsir-api"
-TAG="latest"
-IMAGE="$ECR_URL:$TAG"
-echo "$IMAGE"              # sanity check: must end in finsir-api:latest
-
-aws --profile terraform ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin "${ECR_URL%/*}"
-docker build -t "$IMAGE" .
-docker push "$IMAGE"
-```
-
-If the repo doesn't exist yet:
-`aws --profile terraform ecr create-repository --repository-name finsir-api --region us-east-1`.
-
-> If a push ever fails with "repository ... does not exist" and the name looks
-> mangled (e.g. `finsir-apiatest`), your `ECR_URL` picked up the inline comment.
-> Re-run the block above exactly, keeping the comment off the assignment line.
-
-### 4. Deploy the API
-
-```bash
-cd iac/api/terraform-ecs
-cp terraform.tfvars.example terraform.tfvars
-# Set auth_dev_secret (at least 16 chars). Remember it — you need the same value to make tokens.
-AWS_PROFILE=terraform terraform init
-AWS_PROFILE=terraform terraform apply
-```
-
-### 5. Find the URL and call it
-
-The public IP changes every redeploy, so look it up:
-
-```bash
-cd iac/api/terraform-ecs
-CLUSTER=$(AWS_PROFILE=terraform terraform output -raw cluster_name)
-SERVICE=$(AWS_PROFILE=terraform terraform output -raw service_name)
-TASK=$(aws --profile terraform ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
-  --region us-east-1 --query 'taskArns[0]' --output text)
-ENI=$(aws --profile terraform ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
-  --region us-east-1 --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value | [0]' --output text)
-IP=$(aws --profile terraform ec2 describe-network-interfaces --network-interface-ids "$ENI" \
-  --region us-east-1 --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
-echo "http://$IP:8080"
-```
-
-`/health` is open. For `/v1/*` you need a token signed with the same
-`auth_dev_secret` and a `gold:read` scope:
-
-```bash
-cd iac/api
-TOKEN=$(.venv/bin/python -c "import jwt,time; print(jwt.encode({'sub':'demo','scope':'gold:read','exp':int(time.time())+86400},'<your-auth_dev_secret>',algorithm='HS256'))")
-curl "http://$IP:8080/health"
-curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/gold/train/clients/1375586"
-curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/gold/train/months/2016-04-28?size=10"
-```
-
-Swagger UI is at `http://$IP:8080/docs` — click **Authorize** and paste the token
-(no `Bearer ` prefix).
-
-## Tear down (so it stops costing money)
-
-Destroy in reverse: API first, then the data platform. Once destroyed, nothing
-keeps running or billing (only kept S3 data costs a few cents).
-
-### 1. API
-
-```bash
-cd iac/api/terraform-ecs
-AWS_PROFILE=terraform terraform destroy
-```
-
-This stops the Fargate task (the main cost). The ECR image stays; delete it too
-if you want:
-
-```bash
-aws --profile terraform ecr delete-repository --repository-name finsir-api --region us-east-1 --force
-```
-
-### 2. Data platform
-
-The S3 bucket isn't empty, so a plain destroy fails. Pick one:
-
-**Delete everything, data included:**
-
-```bash
-cd iac/data-platform/terraform
-AWS_PROFILE=terraform terraform destroy -var="force_destroy_bucket=true"
-```
-
-**Keep the data in S3** (so you don't re-upload 2.3 GB later), remove the rest:
-
-```bash
-cd iac/data-platform/terraform
-AWS_PROFILE=terraform terraform state rm \
-  'aws_s3_bucket.lake[0]' \
-  'aws_s3_bucket_public_access_block.lake[0]' \
-  'aws_s3_bucket_server_side_encryption_configuration.lake[0]' \
-  'aws_s3_object.script'
-AWS_PROFILE=terraform terraform destroy
-```
-
-### 3. Check nothing is left
-
-```bash
-aws --profile terraform ecs list-clusters --region us-east-1   # should be empty
-aws --profile terraform s3 ls | grep finsir                    # empty if you deleted the bucket
-```
-
-> The old App Runner attempt left two unused IAM roles (`finsir-api-instance-role`,
-> `finsir-api-access-role`). They're free; delete them by hand if you want a clean account.
-
-## Run the API locally (no AWS deploy)
-
-Dev mode checks HS256 tokens without any committed secret. The data routes still
-need AWS credentials because they hit Athena/Glue.
+El modo dev valida tokens HS256 sin ningún secreto versionado. Las rutas de
+datos sí necesitan credenciales de AWS porque consultan Athena/Glue.
 
 ```bash
 cd iac/api
@@ -237,39 +116,39 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 ## Tests
 
 ```bash
-# API (no real AWS calls)
+# API (sin llamadas reales a AWS)
 cd iac/api
 pip install -r requirements.txt -r requirements-dev.txt
 pytest --cov=app --cov-report=term-missing
 
-# Glue cleaning script (PySpark local, no AWS)
+# Script de limpieza de Glue (PySpark local, sin AWS)
 cd iac/data-platform
 pip install pyspark pytest
 python -m pytest glue
 ```
 
-## More docs
+## Más documentación
+
+Cada carpeta tiene su README con el detalle técnico y el paso a paso manual:
 
 - API — [`iac/api/README.md`](iac/api/README.md)
-- Data platform — [`iac/data-platform/README.md`](iac/data-platform/README.md)
+- API en ECS — [`iac/api/terraform-ecs/README.md`](iac/api/terraform-ecs/README.md)
+- Plataforma de datos — [`iac/data-platform/README.md`](iac/data-platform/README.md)
 
 ## APM (Agent Package Manager)
 
-This repo uses **APM** to share the team's coding standards and the Engram memory
-setup across AI assistants (Kiro, Claude, Codex). Manifest: [`apm.yml`](apm.yml);
-dependencies land in `apm_modules/` (git-ignored).
+Este repo usa **APM** para compartir los estándares de código del equipo y la
+configuración de memoria Engram entre asistentes de IA (Kiro, Claude, Codex).
+Manifiesto: [`apm.yml`](apm.yml); las dependencias caen en `apm_modules/`
+(ignorado por git).
 
 ```bash
-apm install            # into the local project
-apm install --global   # at user level instead
+apm install            # en el proyecto local
+apm install --global   # a nivel de usuario
 ```
 
-It pulls 9 coding-standard files plus 2 Engram files, and declares two MCP
-servers: `document-loader` and `engram`. Engram needs the `engram` CLI on `PATH`
-and `DEFAULT_ENGRAM_PROJECT` exported.
-
-The hook `engram-save-on-stop.json` can't be installed by APM directly — copy it
-by hand and reinstall:
+El hook `engram-save-on-stop.json` no lo instala APM directamente: cópialo a
+mano y reinstala.
 
 ```bash
 mkdir -p .apm/hooks
@@ -277,11 +156,11 @@ cp engram-save-on-stop.json .apm/hooks/
 apm install
 ```
 
-## Team
+## Equipo
 
 Juan Felipe Restrepo Buitrago, Manuela Castaño Franco, Juan Esteban García Galvis,
 Eduardo Andrés Piñeros Manjarres, Natalia Ceballos Posada.
 
-## License
+## Licencia
 
 MIT.

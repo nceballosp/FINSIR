@@ -1,32 +1,37 @@
-# FINSIR API on ECS Fargate
+# API FINSIR en ECS Fargate
 
-Terraform that runs the FINSIR API container (already in ECR) on ECS Fargate with
-a public IP and no load balancer.
+Terraform que corre el contenedor de la API FINSIR (ya en ECR) sobre ECS Fargate
+con IP pública y sin balanceador de carga.
 
-## What it creates
+> ¿Solo quieres desplegar o derribar rápido? Usa los scripts interactivos
+> (`iac/api/deploy.sh` para desplegar, `iac/destroy.sh` para derribar). El paso a
+> paso de abajo es para entender qué ocurre. Deploy y destroy simples:
+> [README de la raíz](../../../README.md#deploy-rápido-con-los-scripts).
 
-- ECS cluster `finsir-api-cluster`
-- Fargate task `finsir-api` — the ECR image on port 8080, logs to CloudWatch
-- ECS service `finsir-api` — 1 task, public IP, no ALB
-- Execution role (lets ECS pull the image + write logs)
-- Task role (lets the app read Athena/Glue/S3, least privilege)
-- Security group — open on TCP 8080 to everyone
+## Qué crea
+
+- Cluster ECS `finsir-api-cluster`
+- Task Fargate `finsir-api` — la imagen de ECR en el puerto 8080, logs a CloudWatch
+- Servicio ECS `finsir-api` — 1 task, IP pública, sin ALB
+- Rol de ejecución (deja a ECS descargar la imagen + escribir logs)
+- Rol de task (deja a la app leer Athena/Glue/S3, mínimo privilegio)
+- Security group — abierto en TCP 8080 a todo el mundo
 - Log group `/ecs/finsir-api`
 
-It reuses the existing `finsir-api` ECR repo (doesn't create one).
+Reutiliza el repo ECR `finsir-api` existente (no crea uno).
 
-## Deploy
+## Deploy (manual)
 
 ```bash
 cd iac/api/terraform-ecs
-cp terraform.tfvars.example terraform.tfvars   # set auth_dev_secret (>= 16 chars)
+cp terraform.tfvars.example terraform.tfvars   # define auth_dev_secret (>= 16 chars)
 AWS_PROFILE=terraform terraform init
 AWS_PROFILE=terraform terraform apply
 ```
 
-## Find the public IP
+## Encontrar la IP pública
 
-There's no fixed URL (no ALB); the IP changes on every redeploy.
+No hay URL fija (no hay ALB); la IP cambia en cada redeploy.
 
 ```bash
 CLUSTER=$(terraform output -raw cluster_name)
@@ -39,19 +44,19 @@ aws ec2 describe-network-interfaces --network-interface-ids "$ENI" \
   --query 'NetworkInterfaces[0].Association.PublicIp' --output text
 ```
 
-## Call the API
+## Llamar la API
 
-`/health` is open; `/v1/*` needs a token signed with your `auth_dev_secret` and a
-`gold:read` scope.
+`/health` es abierta; `/v1/*` necesita un token firmado con tu `auth_dev_secret`
+y un scope `gold:read`.
 
 ```bash
-IP=<public-ip-from-above>
+IP=<ip-publica-de-arriba>
 curl "http://$IP:8080/health"
 
-# Make a dev token (same secret as auth_dev_secret)
+# Generar un token dev (mismo secreto que auth_dev_secret)
 python - <<'PY'
 import jwt, time
-secret = "<your auth_dev_secret>"
+secret = "<tu auth_dev_secret>"
 print(jwt.encode({"sub":"demo","scope":"gold:read",
                   "exp":int(time.time())+3600}, secret, algorithm="HS256"))
 PY
@@ -59,22 +64,23 @@ TOKEN=<token>
 curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/gold/train/clients/1"
 ```
 
-Traffic is plain HTTP on port 8080 (no TLS). The token needs no `aud`/`iss`
-because this deploy leaves `AUTH_AUDIENCE`/`AUTH_ISSUER` unset; if you set either,
-tokens must include matching claims or they get a 401.
+El tráfico es HTTP plano en el puerto 8080 (sin TLS). El token no necesita
+`aud`/`iss` porque este deploy deja `AUTH_AUDIENCE`/`AUTH_ISSUER` sin definir; si
+defines alguno, los tokens deben incluir el claim correspondiente o reciben 401.
 
-## Tear down
+## Derribar
 
 ```bash
 AWS_PROFILE=terraform terraform destroy
 ```
 
-Stops the Fargate task and removes everything above. The ECR repo survives (it's
-not managed here). For the full platform teardown (data included) see the
-repo-root README, "Tear down".
+Detiene la task Fargate y elimina todo lo de arriba. El repo ECR sobrevive (no se
+maneja aquí). Para el derribo completo de la plataforma (datos incluidos) usa el
+script `iac/destroy.sh` o mira el README de la raíz, "Destroy".
 
-## Heads up
+## Advertencia
 
-This is demo-grade: port 8080 is open to the world and traffic is plain HTTP. To
-harden it: put an ALB in front for a stable HTTPS URL, lock the security group
-down, and move the secret into Secrets Manager with production RS256 auth.
+Esto es grado demo: el puerto 8080 está abierto al mundo y el tráfico es HTTP
+plano. Para endurecerlo: pon un ALB enfrente para una URL HTTPS estable, cierra
+el security group y mueve el secreto a Secrets Manager con auth RS256 de
+producción.

@@ -1,48 +1,55 @@
-# FINSIR Data Platform (silver + gold lakehouse)
+# Plataforma de datos FINSIR (lakehouse silver + gold)
 
-Terraform that builds the silver and gold layers of FINSIR: an S3 data lake, a
-Glue job that cleans the raw Santander `train` dataset, two Glue jobs that build
-the gold tables, and an Athena workgroup with a Glue catalog database and six
-tables.
+Terraform que construye las capas silver y gold de FINSIR: un data lake en S3,
+un job de Glue que limpia el dataset crudo `train` de Santander, dos jobs de
+Glue que construyen las tablas gold y un workgroup de Athena con una base de
+datos y seis tablas en el catálogo de Glue.
 
-## What it creates
+> ¿Solo quieres desplegar rápido? Hay un script interactivo
+> (`deploy.sh` / `deploy.ps1`) que hace todo esto por ti. El paso a paso manual
+> de abajo es para entender qué ocurre. Deploy y destroy simples:
+> [README de la raíz](../../README.md#deploy-rápido-con-los-scripts).
 
-- **S3 lake** (`aws_s3_bucket.lake`): encrypted, no public access. Holds the raw
-  CSV, the Glue scripts, and the silver / rejected / quality / gold outputs.
-- **Glue job** `finsir-limpieza-train`: runs `glue/limpieza_train.py` (Glue 5.0 /
-  Spark) to clean and type the data, writing Parquet partitioned by `fecha_dato`,
-  plus a rejected-rows dataset and a data-quality report.
-- **Glue job** `finsir-gold-train`: runs `glue/gold_train.py` to build
-  `gold_train` from silver (see [Gold layer](#gold-layer-gold_train)).
-- **Glue job** `finsir-gold-segment-conversion`: runs
-  `glue/gold_segment_conversion.py` to build `gold_segment_conversion` from
-  silver (see [Segment conversion](#segment-conversion-gold_segment_conversion)).
-- **IAM**: a least-privilege Glue role (reads the raw data + scripts, writes the
-  silver, rejected, quality and gold folders and `tmp/`).
-- **Athena**: a workgroup, the `finsir` database, and six tables:
-    - `bronze_train`: raw CSV as-is, all strings.
-    - `silver_train`: cleaned Parquet, partitioned by `fecha_dato`.
-    - `rechazados_train`: rejected rows with a reason.
-    - `calidad_train`: the quality report of the last run.
-    - `gold_train`: the model training table, partitioned by `fecha_dato`.
-    - `gold_segment_conversion`: per-segment product conversion rates, partitioned by `fecha_dato`.
+## Qué crea
 
-## Layout
+- **Data lake en S3** (`aws_s3_bucket.lake`): cifrado, sin acceso público.
+  Guarda el CSV crudo, los scripts de Glue y las salidas silver / rechazados /
+  calidad / gold.
+- **Job de Glue** `finsir-limpieza-train`: corre `glue/limpieza_train.py`
+  (Glue 5.0 / Spark) para limpiar y tipar los datos, escribiendo Parquet
+  particionado por `fecha_dato`, más un dataset de filas rechazadas y un reporte
+  de calidad.
+- **Job de Glue** `finsir-gold-train`: corre `glue/gold_train.py` para construir
+  `gold_train` desde silver (ver [Capa gold](#capa-gold-gold_train)).
+- **Job de Glue** `finsir-gold-segment-conversion`: corre
+  `glue/gold_segment_conversion.py` para construir `gold_segment_conversion`
+  desde silver (ver [Conversión por segmento](#conversión-por-segmento-gold_segment_conversion)).
+- **IAM**: un rol de Glue de mínimo privilegio (lee datos crudos + scripts,
+  escribe las carpetas silver, rechazados, calidad y gold, y `tmp/`).
+- **Athena**: un workgroup, la base de datos `finsir` y seis tablas:
+    - `bronze_train`: CSV crudo tal cual, todo string.
+    - `silver_train`: Parquet limpio, particionado por `fecha_dato`.
+    - `rechazados_train`: filas rechazadas con su motivo.
+    - `calidad_train`: reporte de calidad de la última corrida.
+    - `gold_train`: tabla de entrenamiento del modelo, particionada por `fecha_dato`.
+    - `gold_segment_conversion`: tasas de conversión de producto por segmento, particionada por `fecha_dato`.
+
+## Estructura
 
 ```
 iac/data-platform/
-  glue/      limpieza_train.py            Cleaning job: bronze -> silver (uploaded to S3 by s3.tf)
-             gold_train.py                Gold job: silver -> gold_train (uploaded to S3 by s3.tf)
-             gold_segment_conversion.py   Gold job: silver -> gold_segment_conversion (uploaded by s3.tf)
-             test_*.py                    PySpark-local tests (no AWS)
-  athena/    01_tablas.sql, 02_calidad.sql   Reference SQL (tables are made by Terraform)
-  terraform/ the module
+  glue/      limpieza_train.py            Job de limpieza: bronze -> silver (lo sube s3.tf)
+             gold_train.py                Job gold: silver -> gold_train (lo sube s3.tf)
+             gold_segment_conversion.py   Job gold: silver -> gold_segment_conversion (lo sube s3.tf)
+             test_*.py                    Tests PySpark local (sin AWS)
+  athena/    01_tablas.sql, 02_calidad.sql   SQL de referencia (las tablas las crea Terraform)
+  terraform/ el módulo
 ```
 
-`glue/` must stay next to `terraform/` because `s3.tf` uploads the scripts from
+`glue/` debe quedar junto a `terraform/` porque `s3.tf` sube los scripts desde
 `../glue/`.
 
-## How to run
+## Paso a paso (manual)
 
 ```bash
 cd terraform
@@ -52,16 +59,16 @@ terraform apply
 BUCKET=$(terraform output -raw bucket)
 ```
 
-Then upload the raw CSV and run the cleaning job. The file is ~2.3 GB and is not
-managed by Terraform, so **put it at `data/train_ver2.csv` first** (download it
-from the Kaggle Santander Product Recommendation dataset):
+Luego sube el CSV crudo y corre el job de limpieza. El archivo pesa ~2.3 GB y no
+lo maneja Terraform, así que **ponlo en `data/train_ver2.csv` primero**
+(descárgalo del dataset Santander Product Recommendation en Kaggle):
 
 ```bash
 aws s3 cp ../../../data/train_ver2.csv "s3://$BUCKET/raw/train/train_ver2.csv"
 aws glue start-job-run --job-name finsir-limpieza-train --region us-east-1
 ```
 
-When the cleaning job is `SUCCEEDED`, build the gold table:
+Cuando el job de limpieza esté en `SUCCEEDED`, construye las tablas gold:
 
 ```bash
 aws glue start-job-run --job-name finsir-gold-train --region us-east-1
@@ -70,197 +77,199 @@ aws glue get-job-runs --job-name finsir-gold-train --region us-east-1 \
   --max-items 1 --query 'JobRuns[0].JobRunState'
 ```
 
-Both gold jobs read silver, so run them after cleaning succeeds; they are
-independent of each other and can run in parallel.
+Ambos jobs gold leen silver, así que córrelos después de que la limpieza tenga
+éxito; son independientes entre sí y pueden correr en paralelo.
 
-The bucket name and these commands are also Terraform outputs (`bucket`,
-`subir_el_csv`, `ejecutar_la_limpieza`, `run_gold_train`,
-`run_gold_segment_conversion`). `silver_train`, `gold_train` and
-`gold_segment_conversion` are queryable in Athena as soon as their job finishes
-(no `MSCK REPAIR TABLE` needed: they use partition projection).
+El nombre del bucket y estos comandos también son outputs de Terraform
+(`bucket`, `subir_el_csv`, `ejecutar_la_limpieza`, `run_gold_train`,
+`run_gold_segment_conversion`). `silver_train`, `gold_train` y
+`gold_segment_conversion` quedan consultables en Athena apenas termina su job
+(no hace falta `MSCK REPAIR TABLE`: usan partition projection).
 
-## Gold layer: `gold_train`
+## Capa gold: `gold_train`
 
-The table the propensity model trains on. It lives at `s3://<bucket>/gold/train/`
-as Parquet partitioned by `fecha_dato`.
+La tabla sobre la que entrena el modelo de propensión. Vive en
+`s3://<bucket>/gold/train/` como Parquet particionado por `fecha_dato`.
 
-**Rows.** One row per client (`ncodpers`) per month (`fecha_dato`), one for each
-silver row. No row is dropped: the job compares the silver and gold row counts
-and fails if they differ.
+**Filas.** Una fila por cliente (`ncodpers`) por mes (`fecha_dato`), una por cada
+fila de silver. No se descarta ninguna: el job compara el conteo de filas de
+silver y gold y falla si difieren.
 
-**What one row means.** For client `c` in month `t`, the row holds the client's
-profile and products in month `t`, the products held 1, 3 and 6 months before,
-and the answers: which products `c` adds in month `t+1`.
+**Qué significa una fila.** Para el cliente `c` en el mes `t`, la fila tiene el
+perfil y productos de `c` en el mes `t`, los productos que tenía 1, 3 y 6 meses
+antes, y las respuestas: qué productos adquiere `c` en el mes `t+1`.
 
-**Origin** in the tables below:
+**Origen** en las tablas de abajo:
 
-- **raw**: copied unchanged from `silver_train`, which is the Kaggle CSV column
-  after cleaning and typing.
-- **computed**: calculated by `glue/gold_train.py`.
+- **raw**: copiado sin cambios desde `silver_train`, que es la columna del CSV
+  de Kaggle tras limpieza y tipado.
+- **computed**: calculado por `glue/gold_train.py`.
 
-### Key and profile columns
+### Columnas clave y de perfil
 
-| Column                  | Type               | Origin   | Description                                                                                          |
-| ----------------------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------- |
-| `ncodpers`              | bigint             | raw      | Client ID.                                                                                           |
-| `fecha_dato`            | string (partition) | raw      | Month of the record, `YYYY-MM-DD` (2015-01-28 to 2016-05-28).                                        |
-| `month_of_year`         | int                | computed | Month number (1-12) of `fecha_dato`, for seasonality.                                                |
-| `ind_empleado`          | string             | raw      | Employee status: A active, B ex-employee, F subsidiary, N not an employee, P passive.                |
-| `pais_residencia`       | string             | raw      | Country of residence.                                                                                |
-| `sexo`                  | string             | raw      | Sex.                                                                                                 |
-| `age`                   | int                | raw      | Age (null if impossible in the CSV, see silver cleaning).                                            |
-| `antiguedad`            | int                | raw      | Seniority in months (null if negative in the CSV).                                                   |
-| `ind_nuevo`             | int                | raw      | 1 if the client registered in the last 6 months.                                                     |
-| `indrel`                | int                | raw      | 1 primary client; 99 primary during the month but not at month end.                                  |
-| `indrel_1mes`           | string             | raw      | Client type at month start: 1 primary, 2 co-owner, P potential, 3 former primary, 4 former co-owner. |
-| `tiprel_1mes`           | string             | raw      | Relation at month start: A active, I inactive, P former client, R potential.                         |
-| `indresi`               | string             | raw      | S/N: lives in the same country as the bank.                                                          |
-| `indext`                | string             | raw      | S/N: born in a different country than the bank.                                                      |
-| `canal_entrada`         | string             | raw      | Channel the client joined through.                                                                   |
-| `indfall`               | string             | raw      | S/N: deceased.                                                                                       |
-| `cod_prov`              | int                | raw      | Province code of the client's address.                                                               |
-| `ind_actividad_cliente` | int                | raw      | 1 active client, 0 inactive.                                                                         |
-| `renta`                 | double             | raw      | Gross household income (null when unknown; never imputed).                                           |
-| `segmento`              | string             | raw      | 01 VIP, 02 individuals, 03 college graduates.                                                        |
+| Columna                 | Tipo               | Origen   | Descripción                                                                                               |
+| ----------------------- | ------------------ | -------- | --------------------------------------------------------------------------------------------------------- |
+| `ncodpers`              | bigint             | raw      | ID del cliente.                                                                                           |
+| `fecha_dato`            | string (partición) | raw      | Mes del registro, `YYYY-MM-DD` (2015-01-28 a 2016-05-28).                                                 |
+| `month_of_year`         | int                | computed | Número de mes (1-12) de `fecha_dato`, para estacionalidad.                                                |
+| `ind_empleado`          | string             | raw      | Estado de empleado: A activo, B ex-empleado, F filial, N no empleado, P pasivo.                           |
+| `pais_residencia`       | string             | raw      | País de residencia.                                                                                       |
+| `sexo`                  | string             | raw      | Sexo.                                                                                                     |
+| `age`                   | int                | raw      | Edad (null si es imposible en el CSV, ver limpieza silver).                                               |
+| `antiguedad`            | int                | raw      | Antigüedad en meses (null si es negativa en el CSV).                                                      |
+| `ind_nuevo`             | int                | raw      | 1 si el cliente se registró en los últimos 6 meses.                                                       |
+| `indrel`                | int                | raw      | 1 cliente primario; 99 primario durante el mes pero no al cierre.                                         |
+| `indrel_1mes`           | string             | raw      | Tipo de cliente al inicio del mes: 1 primario, 2 co-titular, P potencial, 3 ex primario, 4 ex co-titular. |
+| `tiprel_1mes`           | string             | raw      | Relación al inicio del mes: A activo, I inactivo, P ex cliente, R potencial.                              |
+| `indresi`               | string             | raw      | S/N: vive en el mismo país que el banco.                                                                  |
+| `indext`                | string             | raw      | S/N: nació en un país distinto al del banco.                                                              |
+| `canal_entrada`         | string             | raw      | Canal por el que entró el cliente.                                                                        |
+| `indfall`               | string             | raw      | S/N: fallecido.                                                                                           |
+| `cod_prov`              | int                | raw      | Código de provincia de la dirección del cliente.                                                          |
+| `ind_actividad_cliente` | int                | raw      | 1 cliente activo, 0 inactivo.                                                                             |
+| `renta`                 | double             | raw      | Ingreso bruto del hogar (null si se desconoce; nunca se imputa).                                          |
+| `segmento`              | string             | raw      | 01 VIP, 02 particulares, 03 recién graduados.                                                             |
 
-### Product columns
+### Columnas de producto
 
-Each of the 24 products has five columns. The families:
+Cada uno de los 24 productos tiene cinco columnas. Las familias:
 
-| Column pattern         | Type | Origin   | Description                                                                                                                              |
-| ---------------------- | ---- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `<product>`            | int  | raw      | 1 if the client holds the product in month `t`, 0 if not, null if missing in the CSV.                                                    |
-| `<product>_lag1`       | int  | computed | `<product>` in month `t-1`. Null if the client has no row that month or the value is missing.                                            |
-| `<product>_lag3`       | int  | computed | `<product>` in month `t-3`. Same null rule.                                                                                              |
-| `<product>_lag6`       | int  | computed | `<product>` in month `t-6`. Same null rule.                                                                                              |
-| `added_<product>`      | int  | computed | 1 if the client added the product **this** month (not held in `t-1`, held in `t`), 0 if not. Null if no row in `t-1`. A safe feature.    |
-| `label_next_<product>` | int  | computed | **Label.** 1 if the client adds the product in `t+1` (not held in `t`, held in `t+1`), 0 if not. Null if the client has no row in `t+1`. |
+| Patrón de columna      | Tipo | Origen   | Descripción                                                                                                                                       |
+| ---------------------- | ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<product>`            | int  | raw      | 1 si el cliente tiene el producto en el mes `t`, 0 si no, null si falta en el CSV.                                                                |
+| `<product>_lag1`       | int  | computed | `<product>` en el mes `t-1`. Null si el cliente no tiene fila ese mes o el valor falta.                                                           |
+| `<product>_lag3`       | int  | computed | `<product>` en el mes `t-3`. Misma regla de null.                                                                                                 |
+| `<product>_lag6`       | int  | computed | `<product>` en el mes `t-6`. Misma regla de null.                                                                                                 |
+| `added_<product>`      | int  | computed | 1 si el cliente adquirió el producto **este** mes (no lo tenía en `t-1`, lo tiene en `t`), 0 si no. Null si no hay fila en `t-1`. Feature segura. |
+| `label_next_<product>` | int  | computed | **Etiqueta.** 1 si el cliente lo adquiere en `t+1` (no lo tiene en `t`, lo tiene en `t+1`), 0 si no. Null si el cliente no tiene fila en `t+1`.   |
 
-`added_<product>` (this month) and `label_next_<product>` (next month) use the
-same 0→1 rule shifted by one month: the first is an input feature, the second is
-the answer.
+`added_<product>` (este mes) y `label_next_<product>` (mes siguiente) usan la
+misma regla 0→1 desplazada un mes: la primera es una feature de entrada, la
+segunda es la respuesta.
 
-Lags look at calendar months, not at the previous row: if a client skipped a
-month, the lag is null instead of an older value.
+Los lags miran meses de calendario, no la fila anterior: si un cliente se salta
+un mes, el lag es null en vez de un valor más viejo.
 
-All 24 products and their column names (each also has `added_<product>`):
+Los 24 productos y sus nombres de columna (cada uno tiene también `added_<product>`):
 
-| Product                   | Holding (raw)       | Lags (computed)                            | Label (computed)               |
-| ------------------------- | ------------------- | ------------------------------------------ | ------------------------------ |
-| Savings account           | `ind_ahor_fin_ult1` | `ind_ahor_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ahor_fin_ult1` |
-| Guarantees                | `ind_aval_fin_ult1` | `ind_aval_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_aval_fin_ult1` |
-| Current account           | `ind_cco_fin_ult1`  | `ind_cco_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_cco_fin_ult1`  |
-| Derivatives account       | `ind_cder_fin_ult1` | `ind_cder_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_cder_fin_ult1` |
-| Payroll account           | `ind_cno_fin_ult1`  | `ind_cno_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_cno_fin_ult1`  |
-| Junior account            | `ind_ctju_fin_ult1` | `ind_ctju_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctju_fin_ult1` |
-| "Más particular" account  | `ind_ctma_fin_ult1` | `ind_ctma_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctma_fin_ult1` |
-| "Particular" account      | `ind_ctop_fin_ult1` | `ind_ctop_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctop_fin_ult1` |
-| "Particular Plus" account | `ind_ctpp_fin_ult1` | `ind_ctpp_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctpp_fin_ult1` |
-| Short-term deposit        | `ind_deco_fin_ult1` | `ind_deco_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_deco_fin_ult1` |
-| Medium-term deposit       | `ind_deme_fin_ult1` | `ind_deme_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_deme_fin_ult1` |
-| Long-term deposit         | `ind_dela_fin_ult1` | `ind_dela_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_dela_fin_ult1` |
-| e-account                 | `ind_ecue_fin_ult1` | `ind_ecue_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ecue_fin_ult1` |
-| Funds                     | `ind_fond_fin_ult1` | `ind_fond_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_fond_fin_ult1` |
-| Mortgage                  | `ind_hip_fin_ult1`  | `ind_hip_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_hip_fin_ult1`  |
-| Pension plan              | `ind_plan_fin_ult1` | `ind_plan_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_plan_fin_ult1` |
-| Loans                     | `ind_pres_fin_ult1` | `ind_pres_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_pres_fin_ult1` |
-| Taxes                     | `ind_reca_fin_ult1` | `ind_reca_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_reca_fin_ult1` |
-| Credit card               | `ind_tjcr_fin_ult1` | `ind_tjcr_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_tjcr_fin_ult1` |
-| Securities                | `ind_valo_fin_ult1` | `ind_valo_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_valo_fin_ult1` |
-| Home account              | `ind_viv_fin_ult1`  | `ind_viv_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_viv_fin_ult1`  |
-| Payroll                   | `ind_nomina_ult1`   | `ind_nomina_ult1_lag1`, `_lag3`, `_lag6`   | `label_next_ind_nomina_ult1`   |
-| Pensions                  | `ind_nom_pens_ult1` | `ind_nom_pens_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_nom_pens_ult1` |
-| Direct debit              | `ind_recibo_ult1`   | `ind_recibo_ult1_lag1`, `_lag3`, `_lag6`   | `label_next_ind_recibo_ult1`   |
+| Producto                 | Tenencia (raw)      | Lags (computed)                            | Etiqueta (computed)            |
+| ------------------------ | ------------------- | ------------------------------------------ | ------------------------------ |
+| Cuenta de ahorros        | `ind_ahor_fin_ult1` | `ind_ahor_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ahor_fin_ult1` |
+| Garantías                | `ind_aval_fin_ult1` | `ind_aval_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_aval_fin_ult1` |
+| Cuenta corriente         | `ind_cco_fin_ult1`  | `ind_cco_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_cco_fin_ult1`  |
+| Cuenta de derivados      | `ind_cder_fin_ult1` | `ind_cder_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_cder_fin_ult1` |
+| Cuenta de nómina         | `ind_cno_fin_ult1`  | `ind_cno_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_cno_fin_ult1`  |
+| Cuenta junior            | `ind_ctju_fin_ult1` | `ind_ctju_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctju_fin_ult1` |
+| Cuenta "Más particular"  | `ind_ctma_fin_ult1` | `ind_ctma_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctma_fin_ult1` |
+| Cuenta "Particular"      | `ind_ctop_fin_ult1` | `ind_ctop_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctop_fin_ult1` |
+| Cuenta "Particular Plus" | `ind_ctpp_fin_ult1` | `ind_ctpp_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctpp_fin_ult1` |
+| Depósito corto plazo     | `ind_deco_fin_ult1` | `ind_deco_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_deco_fin_ult1` |
+| Depósito mediano plazo   | `ind_deme_fin_ult1` | `ind_deme_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_deme_fin_ult1` |
+| Depósito largo plazo     | `ind_dela_fin_ult1` | `ind_dela_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_dela_fin_ult1` |
+| Cuenta electrónica       | `ind_ecue_fin_ult1` | `ind_ecue_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ecue_fin_ult1` |
+| Fondos                   | `ind_fond_fin_ult1` | `ind_fond_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_fond_fin_ult1` |
+| Hipoteca                 | `ind_hip_fin_ult1`  | `ind_hip_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_hip_fin_ult1`  |
+| Plan de pensiones        | `ind_plan_fin_ult1` | `ind_plan_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_plan_fin_ult1` |
+| Préstamos                | `ind_pres_fin_ult1` | `ind_pres_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_pres_fin_ult1` |
+| Impuestos                | `ind_reca_fin_ult1` | `ind_reca_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_reca_fin_ult1` |
+| Tarjeta de crédito       | `ind_tjcr_fin_ult1` | `ind_tjcr_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_tjcr_fin_ult1` |
+| Valores                  | `ind_valo_fin_ult1` | `ind_valo_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_valo_fin_ult1` |
+| Cuenta vivienda          | `ind_viv_fin_ult1`  | `ind_viv_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_viv_fin_ult1`  |
+| Nómina                   | `ind_nomina_ult1`   | `ind_nomina_ult1_lag1`, `_lag3`, `_lag6`   | `label_next_ind_nomina_ult1`   |
+| Pensiones                | `ind_nom_pens_ult1` | `ind_nom_pens_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_nom_pens_ult1` |
+| Débito directo           | `ind_recibo_ult1`   | `ind_recibo_ult1_lag1`, `_lag3`, `_lag6`   | `label_next_ind_recibo_ult1`   |
 
-### Count columns
+### Columnas de conteo
 
-| Column               | Type | Origin   | Description                                                                                                                                   |
-| -------------------- | ---- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `n_products`         | int  | computed | Products held in month `t`.                                                                                                                   |
-| `n_products_added`   | int  | computed | Products added in month `t` (not held in `t-1`, held in `t`). Null if the client has no row in `t-1`.                                         |
-| `n_products_dropped` | int  | computed | Products dropped in month `t` (held in `t-1`, not held in `t`). Null if the client has no row in `t-1`.                                       |
-| `has_previous_month` | int  | computed | 1 if the client has a row in `t-1`, 0 if not (new client or a skipped month).                                                                 |
-| `label_next_n_added` | int  | computed | **Label.** Number of products added in `t+1`. Null if the client has no row in `t+1`. Use `label_next_n_added > 0` to pick the training rows. |
+| Columna              | Tipo | Origen   | Descripción                                                                                                                                                 |
+| -------------------- | ---- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `n_products`         | int  | computed | Productos que tiene en el mes `t`.                                                                                                                          |
+| `n_products_added`   | int  | computed | Productos adquiridos en el mes `t` (no en `t-1`, sí en `t`). Null si el cliente no tiene fila en `t-1`.                                                     |
+| `n_products_dropped` | int  | computed | Productos dados de baja en el mes `t` (sí en `t-1`, no en `t`). Null si el cliente no tiene fila en `t-1`.                                                  |
+| `has_previous_month` | int  | computed | 1 si el cliente tiene fila en `t-1`, 0 si no (cliente nuevo o mes saltado).                                                                                 |
+| `label_next_n_added` | int  | computed | **Etiqueta.** Número de productos adquiridos en `t+1`. Null si no tiene fila en `t+1`. Usa `label_next_n_added > 0` para elegir las filas de entrenamiento. |
 
-In total: 168 columns plus the `fecha_dato` partition (2 key, 17 profile, 24
-holdings, 72 lags, 24 `added_`, 4 counts, 24 `label_next_`, 1 `label_next_n_added`).
+En total: 168 columnas más la partición `fecha_dato` (2 clave, 17 perfil, 24
+tenencias, 72 lags, 24 `added_`, 4 conteos, 24 `label_next_`, 1 `label_next_n_added`).
 
-### Silver columns left out
+### Columnas de silver que quedaron fuera
 
-| Column                                    | Why                                            |
-| ----------------------------------------- | ---------------------------------------------- |
-| `nomprov`                                 | Same information as `cod_prov`.                |
-| `tipodom`                                 | Always 1.                                      |
-| `conyuemp`, `ult_fec_cli_1t`              | Almost always empty.                           |
-| `fecha_alta`                              | `antiguedad` already measures seniority.       |
-| `campos_rescatados`, `campos_invalidados` | Data-quality tracking, not client information. |
+| Columna                                   | Por qué                                      |
+| ----------------------------------------- | -------------------------------------------- |
+| `nomprov`                                 | Misma información que `cod_prov`.            |
+| `tipodom`                                 | Siempre 1.                                   |
+| `conyuemp`, `ult_fec_cli_1t`              | Casi siempre vacías.                         |
+| `fecha_alta`                              | `antiguedad` ya mide la antigüedad.          |
+| `campos_rescatados`, `campos_invalidados` | Seguimiento de calidad, no info del cliente. |
 
-They stay in `silver_train`; nothing is deleted from the lake.
+Siguen en `silver_train`; no se borra nada del lake.
 
-## Segment conversion: `gold_segment_conversion`
+## Conversión por segmento: `gold_segment_conversion`
 
-How often each type of client adopts each product. It helps the model with
-clients who have little history, and it feeds the dashboard. It lives at
-`s3://<bucket>/gold/segment_conversion/` as Parquet partitioned by `fecha_dato`.
+Qué tan seguido cada tipo de cliente adopta cada producto. Ayuda al modelo con
+clientes de poca historia y alimenta el dashboard. Vive en
+`s3://<bucket>/gold/segment_conversion/` como Parquet particionado por
+`fecha_dato`.
 
-**Rows.** One row per `fecha_dato` × `segmento` × product (24 products × the
-segments present each month). Rows with no `segmento` are dropped: the rate is
-defined per segment.
+**Filas.** Una fila por `fecha_dato` × `segmento` × producto (24 productos × los
+segmentos presentes cada mes). Las filas sin `segmento` se descartan: la tasa se
+define por segmento.
 
-**What one row means.** For a segment and product at month `t`, the conversion
-rate is adopters ÷ eligible, counted over every month **strictly before** `t`:
+**Qué significa una fila.** Para un segmento y producto en el mes `t`, la tasa
+de conversión es adoptantes ÷ elegibles, contando sobre todos los meses
+**estrictamente anteriores** a `t`:
 
-- **eligible**: clients in the segment who did not hold the product the month
-  before, and who have a row that month (so an adoption could be observed),
-- **adopters**: those eligible clients who started holding it that month.
+- **elegibles**: clientes del segmento que no tenían el producto el mes anterior
+  y que tienen fila ese mes (para poder observar una adopción),
+- **adoptantes**: esos elegibles que empezaron a tenerlo ese mes.
 
-| Column            | Type               | Origin   | Description                                                                                       |
-| ----------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------- |
-| `segmento`        | string             | raw      | Client segment (01 VIP, 02 individuals, 03 college graduates).                                    |
-| `product`         | string             | computed | One of the 24 `ind_*_ult1` product names.                                                         |
-| `eligible`        | bigint             | computed | Clients in the segment eligible to adopt the product, summed over all months before `fecha_dato`. |
-| `adopters`        | bigint             | computed | Eligible clients who adopted it, summed over all months before `fecha_dato`.                      |
-| `conversion_rate` | double             | computed | `adopters / eligible`. Null when `eligible` is 0 (the first month has no prior data).             |
-| `fecha_dato`      | string (partition) | raw      | The month the rate applies to, `YYYY-MM-DD`.                                                      |
+| Columna           | Tipo               | Origen   | Descripción                                                                                     |
+| ----------------- | ------------------ | -------- | ----------------------------------------------------------------------------------------------- |
+| `segmento`        | string             | raw      | Segmento del cliente (01 VIP, 02 particulares, 03 recién graduados).                            |
+| `product`         | string             | computed | Uno de los 24 nombres de producto `ind_*_ult1`.                                                 |
+| `eligible`        | bigint             | computed | Clientes del segmento elegibles a adoptar, sumados sobre todos los meses antes de `fecha_dato`. |
+| `adopters`        | bigint             | computed | Clientes elegibles que lo adoptaron, sumados sobre todos los meses antes de `fecha_dato`.       |
+| `conversion_rate` | double             | computed | `adopters / eligible`. Null cuando `eligible` es 0 (el primer mes no tiene datos previos).      |
+| `fecha_dato`      | string (partición) | raw      | El mes al que aplica la tasa, `YYYY-MM-DD`.                                                     |
 
-**No leakage.** The rate for month `t` uses only months before `t`, so joining
-`gold_segment_conversion` into `gold_train` on (`fecha_dato`, `segmento`,
-`product`) gives a feature that never sees month `t`'s own purchases or the
-label. The earliest month's rate is null.
+**Sin fuga de información.** La tasa del mes `t` usa solo meses anteriores a `t`,
+así que unir `gold_segment_conversion` en `gold_train` por (`fecha_dato`,
+`segmento`, `product`) da una feature que nunca ve las compras ni la etiqueta del
+propio mes `t`. La tasa del primer mes es null.
 
-## Rules for using gold_train without leakage
+## Reglas para usar gold_train sin fuga de información
 
-- **Features** are every column without the `label_next_` prefix, including the
-  `added_` flags. They only read months up to `t`.
-- **Labels** are the `label_next_` columns. They read month `t+1`. Never feed
-  them to the model as inputs.
-- A missing product value counts as "not held" when computing additions, so a
-  product going from null to 1 counts as added.
-- **May 2016 has no labels** (there is no June 2016 in the CSV). Those rows are
-  the input for real recommendations.
-- **Out-of-time split:** train on rows with `fecha_dato` up to 2016-02-28,
-  validate on 2016-03-28 (labels are the April additions), and test on
-  2016-04-28 (labels are the May additions). Never train on the test month.
+- **Features** son todas las columnas sin el prefijo `label_next_`, incluidas
+  las banderas `added_`. Solo leen meses hasta `t`.
+- **Etiquetas** son las columnas `label_next_`. Leen el mes `t+1`. Nunca las
+  uses como entrada del modelo.
+- Un valor de producto faltante cuenta como "no tenido" al calcular adquisiciones,
+  así que un producto que pasa de null a 1 cuenta como adquirido.
+- **Mayo 2016 no tiene etiquetas** (no hay junio 2016 en el CSV). Esas filas son
+  la entrada para recomendaciones reales.
+- **Split fuera de tiempo:** entrena con filas hasta `fecha_dato` 2016-02-28,
+  valida con 2016-03-28 (las etiquetas son las adquisiciones de abril) y prueba
+  con 2016-04-28 (etiquetas de mayo). Nunca entrenes con el mes de prueba.
 
 ## Toggles
 
-| Variable                 | Default | What it does                                                                         |
-| ------------------------ | ------- | ------------------------------------------------------------------------------------ |
-| `create_bucket`          | `true`  | Create the bucket, or reuse one (`bucket_name` then required).                       |
-| `create_athena`          | `true`  | Create the database, workgroup, and tables.                                          |
-| `existing_glue_role_arn` | `""`    | Reuse an existing Glue role instead of making one.                                   |
-| `partition_projection`   | `true`  | Auto-discover `fecha_dato=...` partitions.                                           |
-| `force_destroy_bucket`   | `false` | Allow `terraform destroy` to delete a non-empty bucket. Keep `false` with real data. |
+| Variable                 | Default | Qué hace                                                                                       |
+| ------------------------ | ------- | ---------------------------------------------------------------------------------------------- |
+| `create_bucket`          | `true`  | Crear el bucket, o reutilizar uno (entonces `bucket_name` es obligatorio).                     |
+| `create_athena`          | `true`  | Crear la base de datos, el workgroup y las tablas.                                             |
+| `existing_glue_role_arn` | `""`    | Reutilizar un rol de Glue existente en vez de crear uno.                                       |
+| `partition_projection`   | `true`  | Autodescubrir las particiones `fecha_dato=...`.                                                |
+| `force_destroy_bucket`   | `false` | Permitir que `terraform destroy` borre un bucket no vacío. Déjalo en `false` con datos reales. |
 
-The gold output folder is `gold_prefix` (default `gold/train/`).
+La carpeta de salida gold es `gold_prefix` (default `gold/train/`).
 
-Region defaults to `us-east-1`; `aws ~> 5.80`, Terraform `>= 1.5`.
+La región por defecto es `us-east-1`; `aws ~> 5.80`, Terraform `>= 1.5`.
 
-## Not done yet
+## Pendiente
 
-The remaining gold tables (dashboard aggregates, test-set results) and the
-orchestration (EventBridge → Step Functions → Glue jobs) come later. Today the
-three Glue jobs are started by hand, cleaning first.
+Las demás tablas gold (agregados del dashboard, resultados del test) y la
+orquestación (EventBridge → Step Functions → jobs de Glue) vienen después. Hoy
+los tres jobs de Glue se arrancan a mano, limpieza primero.
 
 ## Tests
 
@@ -269,9 +278,9 @@ pip install pyspark pytest
 python -m pytest glue
 ```
 
-The `gold_train` tests check the labels, the lags, the `added_` flags, the
-skipped-month rule, that no row is lost, that features don't change when future
-months are added, and that the API's column list matches the job's. The
-`gold_segment_conversion` tests check that the rate only uses earlier months
-(never its own month), that segments stay separate, and that rows without a
-segment are dropped.
+Los tests de `gold_train` verifican las etiquetas, los lags, las banderas
+`added_`, la regla de mes saltado, que no se pierda ninguna fila, que las
+features no cambien al agregar meses futuros y que la lista de columnas de la API
+coincida con la del job. Los tests de `gold_segment_conversion` verifican que la
+tasa solo use meses anteriores (nunca el propio), que los segmentos queden
+separados y que las filas sin segmento se descarten.

@@ -1,47 +1,53 @@
-# FINSIR API (gold service)
+# API FINSIR (servicio gold)
 
-FastAPI service that serves the FINSIR gold training table. It queries Athena
-(`gold_train`) and reads table info from the Glue catalog. It runs on AWS ECS
-Fargate at `http://<task-ip>:8080` (plain HTTP, no load balancer). A bearer JWT is
-checked inside FastAPI — there's no API Gateway. The silver endpoints were
-removed; the columns are documented in
-[`../data-platform/README.md`](../data-platform/README.md#gold-layer-gold_train).
+Servicio FastAPI que sirve la tabla gold de entrenamiento de FINSIR. Consulta
+Athena (`gold_train`) y lee la info de la tabla desde el catálogo de Glue. Corre
+en AWS ECS Fargate en `http://<task-ip>:8080` (HTTP plano, sin balanceador de
+carga). Un JWT bearer se valida dentro de FastAPI (no hay API Gateway). Las
+columnas están documentadas en
+[`../data-platform/README.md`](../data-platform/README.md#capa-gold-gold_train).
 
-## How the code is organized (hexagonal)
+> ¿Solo quieres desplegar rápido? Hay un script interactivo
+> (`deploy.sh` / `deploy.ps1`) que construye la imagen, la sube a ECR y aplica
+> Terraform por ti. El detalle de abajo es para entender qué ocurre. Deploy y
+> destroy simples: [README de la raíz](../../README.md#deploy-rápido-con-los-scripts).
 
-Dependencies point inward: `adapters -> use cases -> domain`.
+## Cómo está organizado el código (hexagonal)
+
+Las dependencias apuntan hacia adentro: `adapters -> use cases -> domain`.
 
 ```
 app/
-  domain/            Entities + typed errors. No framework imports.
-  use_cases/         GoldTrainRepository port + the two use cases.
+  domain/            Entidades + errores tipados. Sin imports de framework.
+  use_cases/         Puerto GoldTrainRepository + los dos casos de uso.
   adapters/
-    driving/http/    FastAPI app, routers, auth, logging, error handling.
-    driven/athena/   Athena-backed repository (boto3), validation, error mapping.
-  config.py          Settings from env vars.
-  container.py       Wires the Athena adapter into the use cases.
-  main.py            Entry point (uvicorn app.main:app).
+    driving/http/    App FastAPI, routers, auth, logging, manejo de errores.
+    driven/athena/   Repositorio sobre Athena (boto3), validación, mapeo de errores.
+  config.py          Settings desde variables de entorno.
+  container.py       Conecta el adapter de Athena a los casos de uso.
+  main.py            Punto de entrada (uvicorn app.main:app).
 ```
 
-All boto3/Athena code lives behind the `GoldTrainRepository` port, so tests use
-a fake repository and make no AWS calls.
+Todo el código boto3/Athena vive detrás del puerto `GoldTrainRepository`, así que
+los tests usan un repositorio falso y no hacen llamadas a AWS.
 
 ## Endpoints
 
-| Method | Path                                 | Auth | What it returns                                |
-| ------ | ------------------------------------ | ---- | ---------------------------------------------- |
-| GET    | `/health`                            | no   | Health check (used by ECS)                     |
-| GET    | `/v1/gold/train/clients/{ncodpers}`  | yes  | A client's `gold_train` rows, ordered by month |
-| GET    | `/v1/gold/train/months/{fecha_dato}` | yes  | `gold_train` rows for a month (paginated)      |
+| Método | Ruta                                 | Auth | Qué devuelve                                        |
+| ------ | ------------------------------------ | ---- | --------------------------------------------------- |
+| GET    | `/health`                            | no   | Health check (lo usa ECS)                           |
+| GET    | `/v1/gold/train/clients/{ncodpers}`  | sí   | Filas `gold_train` de un cliente, ordenadas por mes |
+| GET    | `/v1/gold/train/months/{fecha_dato}` | sí   | Filas `gold_train` de un mes (paginado)             |
 
-Month listing params: `page` (>= 1), `size` (1..200), `sort` (a `gold_train`
-column). Each row comes back as `ncodpers`, `fecha_dato` and an `attributes`
-object with the other 167 columns (values as strings, nulls kept). Columns that
-start with `label_next_` are the model answers, not features; `added_<product>`
-flags are features (the product was added this month).
+Parámetros del listado por mes: `page` (>= 1), `size` (1..200), `sort` (una
+columna de `gold_train`). Cada fila vuelve como `ncodpers`, `fecha_dato` y un
+objeto `attributes` con las otras 167 columnas (valores como strings, nulls
+conservados). Las columnas que empiezan con `label_next_` son las respuestas del
+modelo, no features; las banderas `added_<product>` sí son features (el producto
+se adquirió este mes).
 
-Success responses wrap data in `data`; errors use `{error.code, error.message,
-correlationId}` and never leak internals.
+Las respuestas exitosas envuelven los datos en `data`; los errores usan
+`{error.code, error.message, correlationId}` y nunca filtran detalles internos.
 
 ```bash
 TOKEN="<bearer-jwt>"
@@ -52,35 +58,35 @@ curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/train/months/2016-04-28?pa
 
 ## Auth
 
-Every `/v1` route needs a bearer JWT (`/health` is open). Nothing is hardcoded —
-it all comes from env vars.
+Toda ruta `/v1` necesita un JWT bearer (`/health` es abierta). Nada está escrito
+en el código: todo viene de variables de entorno.
 
-- **Dev**: `IS_AUTH_DEV_MODE=true` + `AUTH_DEV_SECRET` → checks HS256 tokens. This
-  is what the ECS deploy uses.
-- **Prod**: RS256 with keys from `AUTH_JWKS_URL`, checking `AUTH_AUDIENCE` and
+- **Dev**: `IS_AUTH_DEV_MODE=true` + `AUTH_DEV_SECRET` → valida tokens HS256. Es
+  lo que usa el deploy en ECS.
+- **Prod**: RS256 con claves desde `AUTH_JWKS_URL`, validando `AUTH_AUDIENCE` y
   `AUTH_ISSUER`.
 
-Missing/bad token → 401; wrong scope → 403. The token is never logged.
+Token ausente/inválido → 401; scope equivocado → 403. El token nunca se loguea.
 
-## Environment variables
+## Variables de entorno
 
-| Variable                                                   | Needed | Purpose                           |
-| ---------------------------------------------------------- | ------ | --------------------------------- |
-| `ATHENA_DATABASE`                                          | yes    | Glue database (e.g. `finsir`)     |
-| `ATHENA_WORKGROUP`                                         | yes    | Athena workgroup                  |
-| `ATHENA_OUTPUT`                                            | yes    | S3 URI for Athena results         |
-| `ATHENA_TABLE`                                             | no     | Gold table (default `gold_train`) |
-| `AWS_REGION`                                               | no     | Region (default `us-east-1`)      |
-| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod   | RS256 token checks                |
-| `AUTH_REQUIRED_SCOPE`                                      | no     | Scope needed for data routes      |
-| `IS_AUTH_DEV_MODE`                                         | no     | `true` turns on HS256 dev mode    |
-| `AUTH_DEV_SECRET`                                          | dev    | HS256 secret (dev mode)           |
-| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no     | Log metadata                      |
+| Variable                                                   | ¿Necesaria? | Para qué                             |
+| ---------------------------------------------------------- | ----------- | ------------------------------------ |
+| `ATHENA_DATABASE`                                          | sí          | Base de datos de Glue (ej. `finsir`) |
+| `ATHENA_WORKGROUP`                                         | sí          | Workgroup de Athena                  |
+| `ATHENA_OUTPUT`                                            | sí          | URI de S3 para resultados de Athena  |
+| `ATHENA_TABLE`                                             | no          | Tabla gold (default `gold_train`)    |
+| `AWS_REGION`                                               | no          | Región (default `us-east-1`)         |
+| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod        | Validación de tokens RS256           |
+| `AUTH_REQUIRED_SCOPE`                                      | no          | Scope requerido para rutas de datos  |
+| `IS_AUTH_DEV_MODE`                                         | no          | `true` activa el modo dev HS256      |
+| `AUTH_DEV_SECRET`                                          | dev         | Secreto HS256 (modo dev)             |
+| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no          | Metadata de logs                     |
 
-Dev mode needs `AUTH_DEV_SECRET`; prod needs the JWKS/audience/issuer. The app
-fails fast if a required value is missing.
+El modo dev necesita `AUTH_DEV_SECRET`; prod necesita JWKS/audience/issuer. La
+app falla de inmediato si falta un valor requerido.
 
-## Run locally
+## Correr local
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
@@ -88,7 +94,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 export ATHENA_DATABASE=finsir ATHENA_WORKGROUP=finsir
 export ATHENA_OUTPUT=s3://finsir-<account-id>/athena-results/
 export IS_AUTH_DEV_MODE=true AUTH_DEV_SECRET=dev-secret AUTH_REQUIRED_SCOPE=gold:read
-uvicorn app.main:app --host 0.0.0.0 --port 8080   # needs AWS creds for the data routes
+uvicorn app.main:app --host 0.0.0.0 --port 8080   # necesita credenciales de AWS para las rutas de datos
 ```
 
 ## Tests
@@ -98,43 +104,47 @@ pip install -r requirements.txt -r requirements-dev.txt
 pytest --cov=app --cov-report=term-missing
 ```
 
-Coverage floors: domain > 90%, use cases >= 85%, adapters >= 70%, global >= 80%.
-Tests use a fake repository and fake boto3 — no real AWS.
+Mínimos de cobertura: domain > 90%, use cases >= 85%, adapters >= 70%, global >= 80%.
+Los tests usan un repositorio falso y boto3 falso: nada de AWS real.
 
-## Build and push the image
+## Construir y subir la imagen
 
-The ECS task pulls from the `finsir-api` ECR repo, so build and push first:
+La task de ECS descarga desde el repo ECR `finsir-api`, así que construye y sube
+primero:
 
 ```bash
-ECR_URL="663505294799.dkr.ecr.us-east-1.amazonaws.com/finsir-api"   # use your account's URL
+ECR_URL="663505294799.dkr.ecr.us-east-1.amazonaws.com/finsir-api"   # usa la URL de tu cuenta
 aws --profile terraform ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin "${ECR_URL%/*}"
-docker build -t "$ECR_URL:latest" .    # run from iac/api
+docker build -t "$ECR_URL:latest" .    # córrelo desde iac/api
 docker push "$ECR_URL:latest"
 ```
 
-If the repo doesn't exist:
+Si el repo no existe:
 `aws --profile terraform ecr create-repository --repository-name finsir-api --region us-east-1`.
-Keep `ECR_URL` set in the same shell and quote `:latest`. After a later push,
-re-run `terraform apply` in `terraform-ecs/` so the service pulls the new image.
+Mantén `ECR_URL` en la misma shell y pon `:latest` entre comillas. Tras un push
+posterior, vuelve a correr `terraform apply` en `terraform-ecs/` para que el
+servicio tome la nueva imagen.
 
 ## Deploy
 
-The API is deployed by the Terraform in `terraform-ecs/` (ECS cluster, Fargate
-task + service on port 8080, task/execution roles, security group, log group). It
-reuses the existing ECR repo and reads the data platform's bucket/database/
-workgroup from variables.
+La API la despliega el Terraform de `terraform-ecs/` (cluster ECS, task Fargate
+
+- servicio en el puerto 8080, roles de task/ejecución, security group, log
+  group). Reutiliza el repo ECR existente y lee el bucket/base de datos/workgroup
+  de la plataforma de datos desde variables.
 
 ```bash
 cd terraform-ecs
-cp terraform.tfvars.example terraform.tfvars   # set auth_dev_secret (>= 16 chars)
+cp terraform.tfvars.example terraform.tfvars   # define auth_dev_secret (>= 16 chars)
 AWS_PROFILE=terraform terraform init
 AWS_PROFILE=terraform terraform apply
 ```
 
-See [`terraform-ecs/README.md`](terraform-ecs/README.md) for finding the public
-IP, making a token, and tearing it down.
+Para encontrar la IP pública, generar un token y derribar el servicio, ver
+[`terraform-ecs/README.md`](terraform-ecs/README.md).
 
-> The old App Runner Terraform root was removed (App Runner isn't available on
-> this account). It left two unused, free IAM roles (`finsir-api-instance-role`,
-> `finsir-api-access-role`) — delete them by hand if you want.
+> El root viejo de Terraform para App Runner se eliminó (App Runner no está
+> disponible en esta cuenta). Dejó dos roles IAM sin uso y gratuitos
+> (`finsir-api-instance-role`, `finsir-api-access-role`); bórralos a mano si
+> quieres.
