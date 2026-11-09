@@ -57,10 +57,21 @@ $AthenaTbl  = Ask "Athena table" "gold_train"
 $ServiceEnv = Ask "Service environment (local|dev|uat|prod)" "dev"
 
 if ((AskYesNo "Build and push the Docker image to ECR now?" "n") -eq "true") {
-  aws ecr describe-repositories --repository-names $EcrRepo --region $Region 2>$null | Out-Null
-  if ($LASTEXITCODE -ne 0) {
+  # AWS CLI writes "repository not found" to stderr and exits non-zero. With
+  # $ErrorActionPreference=Stop, PowerShell 7 can promote that stderr output
+  # to a terminating NativeCommandError before we inspect $LASTEXITCODE.
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    aws ecr describe-repositories --repository-names $EcrRepo --region $Region 2>$null | Out-Null
+    $describeExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+  if ($describeExitCode -ne 0) {
     Write-Host "Creating ECR repository $EcrRepo..."
     aws ecr create-repository --repository-name $EcrRepo --region $Region | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not create ECR repository '$EcrRepo'. Check AWS credentials, permissions, and region." }
   }
   $registry = $EcrUrl.Split('/')[0]
   aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $registry

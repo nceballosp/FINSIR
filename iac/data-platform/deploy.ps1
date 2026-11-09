@@ -78,9 +78,19 @@ if ((AskYesNo "Upload the raw CSV now?" "n") -eq "true") {
 try { $SmArn = (terraform output -raw state_machine_arn).Trim() } catch { $SmArn = "" }
 if ((AskYesNo "Start the batch now (Step Functions: cleaning -> gold tables)?" "n") -eq "true") {
   if ($SmArn) {
-    $GoldInput = "{`"gold_jobs`":[`"$Project-gold-train`",`"$Project-gold-segment-conversion`"]}"
-    $ExecArn = (aws stepfunctions start-execution --state-machine-arn $SmArn `
-      --input $GoldInput --region $Region --query executionArn --output text).Trim()
+    # Pasar el JSON por archivo evita que Windows PowerShell quite las comillas
+    # internas al invocar un ejecutable nativo (aws.exe).
+    $GoldInput = @{ gold_jobs = @("$Project-gold-train", "$Project-gold-segment-conversion") } |
+      ConvertTo-Json -Compress
+    $InputFile = [System.IO.Path]::GetTempFileName()
+    try {
+      [System.IO.File]::WriteAllText($InputFile, $GoldInput, [System.Text.UTF8Encoding]::new($false))
+      $ExecArn = (aws stepfunctions start-execution --state-machine-arn $SmArn `
+        --input "file://$InputFile" --region $Region --query executionArn --output text).Trim()
+      if ($LASTEXITCODE -ne 0) { throw "No se pudo iniciar el batch de Step Functions." }
+    } finally {
+      Remove-Item -LiteralPath $InputFile -Force -ErrorAction SilentlyContinue
+    }
     Write-Host "Batch started: $ExecArn"
     Write-Host "Follow it with:"
     Write-Host "  aws stepfunctions describe-execution --execution-arn $ExecArn --region $Region --query status"
