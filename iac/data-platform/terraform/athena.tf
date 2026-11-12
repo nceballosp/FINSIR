@@ -262,3 +262,56 @@ resource "aws_glue_catalog_table" "gold_segment_conversion" {
     }
   }
 }
+
+# Analytical gold tables (dashboard + popularity baseline), one per entry of
+# local.analytics_tables (from glue/gold_analytics_tables.json). All of them are
+# Parquet partitioned by fecha_dato, so filter by fecha_dato to scan one month.
+resource "aws_glue_catalog_table" "gold_analytics" {
+  for_each = var.create_athena ? local.analytics_tables : {}
+
+  name          = each.value.table_name
+  description   = each.value.description
+  database_name = aws_glue_catalog_database.this[0].name
+  table_type    = "EXTERNAL_TABLE"
+
+  parameters = merge(
+    {
+      EXTERNAL              = "TRUE"
+      "parquet.compression" = "SNAPPY"
+    },
+    var.partition_projection ? {
+      "projection.enabled"                  = "true"
+      "projection.fecha_dato.type"          = "date"
+      "projection.fecha_dato.format"        = "yyyy-MM-dd"
+      "projection.fecha_dato.range"         = "${var.primer_corte},NOW"
+      "projection.fecha_dato.interval"      = "1"
+      "projection.fecha_dato.interval.unit" = "MONTHS"
+      "storage.location.template"           = "s3://${local.bucket_id}/${each.value.prefix}fecha_dato=$${fecha_dato}/"
+    } : {}
+  )
+
+  partition_keys {
+    name    = "fecha_dato"
+    type    = "string"
+    comment = "Mes del corte, YYYY-MM-DD"
+  }
+
+  storage_descriptor {
+    location      = "s3://${local.bucket_id}/${each.value.prefix}"
+    input_format  = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
+    output_format = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
+
+    ser_de_info {
+      serialization_library = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+    }
+
+    dynamic "columns" {
+      for_each = each.value.columns
+      content {
+        name    = columns.value.name
+        type    = columns.value.type
+        comment = columns.value.comment
+      }
+    }
+  }
+}

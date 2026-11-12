@@ -1,0 +1,95 @@
+{
+  "product_monthly_kpis": {
+    "description": "KPIs mensuales por producto: tenencia, altas, bajas y ranking de popularidad. Una fila por fecha_dato x producto.",
+    "columns": [
+      { "name": "product", "type": "string", "comment": "Producto (columna ind_*_ult1)" },
+      { "name": "product_name", "type": "string", "comment": "Nombre legible del producto" },
+      { "name": "clients", "type": "bigint", "comment": "Clientes con fila en el mes" },
+      { "name": "holders", "type": "bigint", "comment": "Clientes que tienen el producto en el mes" },
+      { "name": "penetration_rate", "type": "double", "comment": "holders / clients" },
+      { "name": "eligible", "type": "bigint", "comment": "Clientes con fila el mes anterior que no lo tenian (podian adquirirlo)" },
+      { "name": "adds", "type": "bigint", "comment": "Altas: elegibles que lo tienen este mes (0 en t-1, 1 en t)" },
+      { "name": "add_rate", "type": "double", "comment": "adds / eligible" },
+      { "name": "holders_prev", "type": "bigint", "comment": "Clientes con fila este mes que lo tenian el mes anterior" },
+      { "name": "drops", "type": "bigint", "comment": "Bajas: lo tenian en t-1 y no en t" },
+      { "name": "drop_rate", "type": "double", "comment": "drops / holders_prev" },
+      { "name": "net_adds", "type": "bigint", "comment": "adds - drops" },
+      { "name": "popularity_rank", "type": "int", "comment": "Puesto del producto por altas del mes (1 = mas adquirido). Null el primer mes" }
+    ]
+  },
+  "customer_profile": {
+    "description": "Perfil sociodemografico agregado. Una fila por fecha_dato x segmento x rango de edad x sexo x rango de renta.",
+    "columns": [
+      { "name": "segmento", "type": "string", "comment": "Segmento del cliente ('desconocido' si falta)" },
+      { "name": "age_band", "type": "string", "comment": "Rango de edad: 00-17, 18-24, 25-34, 35-44, 45-54, 55-64, 65+, desconocido" },
+      { "name": "sexo", "type": "string", "comment": "Sexo tal como viene en el CSV (H / V; 'desconocido' si falta)" },
+      { "name": "income_band", "type": "string", "comment": "Rango de renta: 000-050k, 050-100k, 100-200k, 200-500k, 500k+, desconocido" },
+      { "name": "clients", "type": "bigint", "comment": "Clientes del grupo" },
+      { "name": "active_clients", "type": "bigint", "comment": "Clientes con ind_actividad_cliente = 1" },
+      { "name": "active_rate", "type": "double", "comment": "active_clients / clients" },
+      { "name": "new_clients", "type": "bigint", "comment": "Clientes con ind_nuevo = 1 (alta en los ultimos 6 meses)" },
+      { "name": "avg_age", "type": "double", "comment": "Edad promedio (ignora edades nulas)" },
+      { "name": "avg_antiguedad_months", "type": "double", "comment": "Antiguedad promedio en meses (ignora nulas)" },
+      { "name": "avg_renta", "type": "double", "comment": "Renta promedio de los que la reportan" },
+      { "name": "median_renta", "type": "double", "comment": "Mediana aproximada de la renta de los que la reportan" },
+      { "name": "renta_known", "type": "bigint", "comment": "Clientes con renta conocida" },
+      { "name": "avg_n_products", "type": "double", "comment": "Productos promedio por cliente" },
+      { "name": "clients_without_products", "type": "bigint", "comment": "Clientes sin ningun producto en el mes" }
+    ]
+  },
+  "product_penetration": {
+    "description": "Penetracion de cada producto por dimension de cliente, para mapas de calor. Una fila por fecha_dato x dimension x valor x producto.",
+    "columns": [
+      { "name": "dimension", "type": "string", "comment": "segmento, age_band, income_band, tenure_band, sexo, provincia o actividad" },
+      { "name": "dimension_value", "type": "string", "comment": "Valor de la dimension ('desconocido' si falta)" },
+      { "name": "product", "type": "string", "comment": "Producto (columna ind_*_ult1)" },
+      { "name": "product_name", "type": "string", "comment": "Nombre legible del producto" },
+      { "name": "clients", "type": "bigint", "comment": "Clientes con ese valor de la dimension" },
+      { "name": "holders", "type": "bigint", "comment": "De esos, los que tienen el producto" },
+      { "name": "penetration_rate", "type": "double", "comment": "holders / clients" }
+    ]
+  },
+  "product_affinity": {
+    "description": "Afinidad entre pares de productos (matriz de co-tenencia y correlacion). Una fila por fecha_dato x producto A x producto B (A distinto de B).",
+    "columns": [
+      { "name": "product_a", "type": "string", "comment": "Producto A (antecedente)" },
+      { "name": "product_a_name", "type": "string", "comment": "Nombre legible del producto A" },
+      { "name": "product_b", "type": "string", "comment": "Producto B (consecuente)" },
+      { "name": "product_b_name", "type": "string", "comment": "Nombre legible del producto B" },
+      { "name": "clients", "type": "bigint", "comment": "Clientes con fila en el mes" },
+      { "name": "holders_a", "type": "bigint", "comment": "Clientes que tienen A" },
+      { "name": "holders_b", "type": "bigint", "comment": "Clientes que tienen B" },
+      { "name": "holders_both", "type": "bigint", "comment": "Clientes que tienen A y B" },
+      { "name": "support", "type": "double", "comment": "holders_both / clients" },
+      { "name": "confidence", "type": "double", "comment": "P(B | A) = holders_both / holders_a" },
+      { "name": "lift", "type": "double", "comment": "confidence / P(B). Mayor que 1 = se tienen juntos mas que por azar" },
+      { "name": "phi", "type": "double", "comment": "Correlacion phi (Pearson entre las dos banderas 0/1), de -1 a 1" }
+    ]
+  },
+  "product_transitions": {
+    "description": "Transiciones de producto para diagramas de Sankey: que tenia en t-1 quien adquirio un producto en t. Una fila por fecha_dato x producto origen x producto adquirido.",
+    "columns": [
+      { "name": "from_product", "type": "string", "comment": "Producto que el cliente tenia en t-1, o 'sin_productos'" },
+      { "name": "from_product_name", "type": "string", "comment": "Nombre legible del producto origen" },
+      { "name": "to_product", "type": "string", "comment": "Producto adquirido en t (0 en t-1, 1 en t)" },
+      { "name": "to_product_name", "type": "string", "comment": "Nombre legible del producto adquirido" },
+      { "name": "clients", "type": "bigint", "comment": "Clientes que tenian from_product en t-1 y adquirieron to_product en t" },
+      { "name": "to_product_adds", "type": "bigint", "comment": "Total de clientes que adquirieron to_product en t" },
+      { "name": "share", "type": "double", "comment": "clients / to_product_adds = P(tenia from_product | adquirio to_product)" }
+    ]
+  },
+  "baseline_popularity": {
+    "description": "Modelo base de popularidad y su MAP@7. Una fila por fecha_dato: ranking por altas del mes t, evaluado contra las altas reales de t+1.",
+    "columns": [
+      { "name": "total_adds", "type": "bigint", "comment": "Altas de todos los productos en el mes t" },
+      { "name": "top_7_products", "type": "string", "comment": "Los 7 productos con mas altas en t, separados por coma (antes de quitar los que ya tiene cada cliente)" },
+      { "name": "popularity_ranking", "type": "string", "comment": "Los 24 productos ordenados por altas en t, separados por coma" },
+      { "name": "label_fecha_dato", "type": "string", "comment": "Mes evaluado (t+1), YYYY-MM-DD" },
+      { "name": "clients_evaluated", "type": "bigint", "comment": "Clientes con fila en t y en t+1 (0 si el mes no tiene ranking o no tiene t+1)" },
+      { "name": "clients_with_adds", "type": "bigint", "comment": "De esos, los que adquirieron al menos un producto en t+1" },
+      { "name": "map_at_7", "type": "double", "comment": "MAP@7 sobre todos los evaluados (como Kaggle: sin altas = 0). Null si no hay t+1" },
+      { "name": "map_at_7_buyers", "type": "double", "comment": "MAP@7 solo sobre los clientes con altas en t+1" },
+      { "name": "hit_rate_at_7_buyers", "type": "double", "comment": "Fraccion de clientes con altas que tienen al menos un acierto en su top 7" }
+    ]
+  }
+}

@@ -78,10 +78,12 @@ if ((AskYesNo "Upload the raw CSV now?" "n") -eq "true") {
 try { $SmArn = (terraform output -raw state_machine_arn).Trim() } catch { $SmArn = "" }
 if ((AskYesNo "Start the batch now (Step Functions: cleaning -> gold tables)?" "n") -eq "true") {
   if ($SmArn) {
+    # La lista de jobs gold sale de Terraform (output gold_jobs_input: los 8,
+    # incluidas las tablas analiticas), asi que agregar una tabla gold nunca
+    # obliga a editar este script.
     # Pasar el JSON por archivo evita que Windows PowerShell quite las comillas
     # internas al invocar un ejecutable nativo (aws.exe).
-    $GoldInput = @{ gold_jobs = @("$Project-gold-train", "$Project-gold-segment-conversion") } |
-      ConvertTo-Json -Compress
+    $GoldInput = (terraform output -raw gold_jobs_input).Trim()
     $InputFile = [System.IO.Path]::GetTempFileName()
     try {
       [System.IO.File]::WriteAllText($InputFile, $GoldInput, [System.Text.UTF8Encoding]::new($false))

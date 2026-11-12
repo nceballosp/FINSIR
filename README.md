@@ -18,7 +18,7 @@ Terraform `>= 1.5`):
 
 | Pieza               | Carpeta              | Qué hace                                                                          |
 | ------------------- | -------------------- | --------------------------------------------------------------------------------- |
-| Plataforma de datos | `iac/data-platform/` | Data lake en S3 + jobs de Glue (limpieza y gold) + tablas en Athena               |
+| Plataforma de datos | `iac/data-platform/` | Data lake en S3 + jobs de Glue (limpieza y 8 tablas gold) + tablas en Athena + orquestación (Step Functions/EventBridge) |
 | API                 | `iac/api/`           | FastAPI que lee la tabla gold de entrenamiento desde Athena, corre en ECS Fargate |
 
 ## Cómo fluyen los datos
@@ -28,9 +28,18 @@ CSV (Kaggle)
   └─▶ S3 Bronze (CSV crudo)
         └─▶ Glue/PySpark limpia y tipa
               └─▶ S3 Silver (Parquet)
-                    └─▶ Glue/PySpark agrega historia + etiquetas del mes siguiente
-                          └─▶ S3 Gold gold_train (Parquet)   ◀── la API lee esto
+                    ├─▶ Glue/PySpark agrega historia + etiquetas del mes siguiente
+                    │     └─▶ S3 Gold gold_train (Parquet)   ◀── la API lee esto
+                    ├─▶ Glue/PySpark: tasas de conversión por segmento
+                    │     └─▶ S3 Gold gold_segment_conversion
+                    └─▶ Glue/PySpark: 6 tablas analíticas (KPIs, perfil, penetración,
+                          afinidad, transiciones, modelo base de popularidad + MAP@7)
+                          └─▶ S3 Gold gold_product_monthly_kpis, gold_customer_profile, …
 ```
+
+Todo el batch lo orquesta una Step Functions (limpieza → los 8 jobs gold en
+paralelo) que dispara una regla de EventBridge. Detalle de cada tabla en
+[`iac/data-platform/README.md`](iac/data-platform/README.md#tablas-gold-analíticas-dashboard-y-modelo-base).
 
 ## Qué necesitas
 

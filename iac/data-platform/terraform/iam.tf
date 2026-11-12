@@ -40,14 +40,17 @@ data "aws_iam_policy_document" "glue_bucket" {
 
   statement {
     actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-    resources = [
-      "${local.bucket_arn}/${var.silver_prefix}*",
-      "${local.bucket_arn}/${var.rechazados_prefix}*",
-      "${local.bucket_arn}/${var.calidad_prefix}*",
-      "${local.bucket_arn}/${var.gold_prefix}*",
-      "${local.bucket_arn}/${var.conversion_prefix}*",
-      "${local.bucket_arn}/tmp/*",
-    ]
+    resources = concat(
+      [
+        "${local.bucket_arn}/${var.silver_prefix}*",
+        "${local.bucket_arn}/${var.rechazados_prefix}*",
+        "${local.bucket_arn}/${var.calidad_prefix}*",
+        "${local.bucket_arn}/${var.gold_prefix}*",
+        "${local.bucket_arn}/${var.conversion_prefix}*",
+        "${local.bucket_arn}/tmp/*",
+      ],
+      [for t in values(local.analytics_tables) : "${local.bucket_arn}/${t.prefix}*"],
+    )
   }
 
   # El conector S3 de Spark/Hadoop crea marcadores de carpeta "<dir>_$folder$"

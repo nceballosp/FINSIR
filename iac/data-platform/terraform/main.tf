@@ -18,12 +18,33 @@ locals {
   conversion_job_name   = "${var.project}-gold-segment-conversion"
   conversion_script_key = "${var.scripts_prefix}gold_segment_conversion.py"
 
+  # Tablas gold analiticas (dashboard + modelo base): un solo script,
+  # glue/gold_analytics.py, y un job de Glue por tabla (--TABLE = la clave).
+  # El esquema sale de glue/gold_analytics_tables.json, el mismo que validan
+  # los tests contra el script. Agregar una tabla analitica = agregarla al JSON
+  # y a TABLES en el script; Terraform crea su job, su tabla y sus permisos.
+  analytics_script_key  = "${var.scripts_prefix}gold_analytics.py"
+  analytics_tables_spec = jsondecode(file("${path.module}/../glue/gold_analytics_tables.json"))
+  analytics_tables = {
+    for key, spec in local.analytics_tables_spec : key => {
+      table_name  = "gold_${key}"
+      job_name    = "${var.project}-gold-${replace(key, "_", "-")}"
+      prefix      = "${var.analytics_root_prefix}${key}/"
+      description = spec.description
+      columns     = spec.columns
+    }
+  }
+
   # Jobs gold que la orquestacion corre en paralelo tras la limpieza.
-  # Agregar una tabla gold nueva = anadir su nombre de job aqui.
-  gold_job_names = [
-    aws_glue_job.gold_train.name,
-    aws_glue_job.gold_segment_conversion.name,
-  ]
+  # Agregar una tabla gold nueva = anadir su nombre de job aqui (las
+  # analiticas entran solas desde local.analytics_tables).
+  gold_job_names = concat(
+    [
+      aws_glue_job.gold_train.name,
+      aws_glue_job.gold_segment_conversion.name,
+    ],
+    [for key in sort(keys(local.analytics_tables)) : aws_glue_job.gold_analytics[key].name],
+  )
 
   # Las columnas del CSV crudo, todas en texto (capa bronze)
   columnas_crudo = [

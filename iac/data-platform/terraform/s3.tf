@@ -48,3 +48,10 @@ resource "aws_s3_object" "conversion_script" {
   source = "${path.module}/../glue/gold_segment_conversion.py"
   etag   = filemd5("${path.module}/../glue/gold_segment_conversion.py")
 }
+
+resource "aws_s3_object" "analytics_script" {
+  bucket = local.bucket_id
+  key    = local.analytics_script_key
+  source = "${path.module}/../glue/gold_analytics.py"
+  etag   = filemd5("${path.module}/../glue/gold_analytics.py")
+}

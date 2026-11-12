@@ -64,6 +64,40 @@ resource "aws_glue_job" "gold_train" {
   }
 }
 
+# Analytical gold tables (dashboard + popularity baseline), one job per table,
+# all running glue/gold_analytics.py with a different --TABLE. Run after cleaning.
+resource "aws_glue_job" "gold_analytics" {
+  for_each = local.analytics_tables
+
+  name              = each.value.job_name
+  description       = each.value.description
+  role_arn          = local.glue_role_arn
+  glue_version      = var.glue_version
+  worker_type       = var.worker_type
+  number_of_workers = var.analytics_number_of_workers
+  timeout           = var.timeout_minutes
+  max_retries       = 0
+
+  command {
+    name            = "glueetl"
+    python_version  = "3"
+    script_location = "s3://${local.bucket_id}/${aws_s3_object.analytics_script.key}"
+  }
+
+  default_arguments = {
+    "--BUCKET"              = local.bucket_id
+    "--TABLE"               = each.key
+    "--SILVER"              = var.silver_prefix
+    "--GOLD"                = each.value.prefix
+    "--job-language"        = "python"
+    "--enable-metrics"      = "true"
+    "--enable-job-insights" = "false"
+    "--enable-spark-ui"     = "false"
+    "--job-bookmark-option" = "job-bookmark-disable"
+    "--TempDir"             = "s3://${local.bucket_id}/tmp/"
+  }
+}
+
 # Gold segment conversion table, built from silver. Run it after cleaning.
 resource "aws_glue_job" "gold_segment_conversion" {
   name              = local.conversion_job_name

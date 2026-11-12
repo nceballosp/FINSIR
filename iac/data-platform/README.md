@@ -1,9 +1,10 @@
 # Plataforma de datos FINSIR (lakehouse silver + gold)
 
 Terraform que construye las capas silver y gold de FINSIR: un data lake en S3,
-un job de Glue que limpia el dataset crudo `train` de Santander, dos jobs de
-Glue que construyen las tablas gold y un workgroup de Athena con una base de
-datos y seis tablas en el catálogo de Glue.
+un job de Glue que limpia el dataset crudo `train` de Santander, ocho jobs de
+Glue que construyen las tablas gold (dos para el modelo y seis analíticas para
+el dashboard) y un workgroup de Athena con una base de datos y doce tablas en
+el catálogo de Glue.
 
 > ¿Solo quieres desplegar rápido? Hay un script interactivo
 > (`deploy.sh` / `deploy.ps1`) que hace todo esto por ti. El paso a paso manual
@@ -24,9 +25,13 @@ datos y seis tablas en el catálogo de Glue.
 - **Job de Glue** `finsir-gold-segment-conversion`: corre
   `glue/gold_segment_conversion.py` para construir `gold_segment_conversion`
   desde silver (ver [Conversión por segmento](#conversión-por-segmento-gold_segment_conversion)).
+- **Seis jobs de Glue** `finsir-gold-<tabla>`: corren `glue/gold_analytics.py`
+  (uno por tabla, con `--TABLE`) para construir las tablas gold analíticas del
+  dashboard y del modelo base (ver [Tablas gold analíticas](#tablas-gold-analíticas-dashboard-y-modelo-base)).
 - **IAM**: un rol de Glue de mínimo privilegio (lee datos crudos + scripts,
   escribe las carpetas silver, rechazados, calidad y gold, y `tmp/`).
-- **Athena**: un workgroup, la base de datos `finsir` y seis tablas:
+- **Athena**: un workgroup, la base de datos `finsir` y doce tablas (las seis
+  de abajo más las seis [analíticas](#tablas-gold-analíticas-dashboard-y-modelo-base)):
     - `bronze_train`: CSV crudo tal cual, todo string.
     - `silver_train`: Parquet limpio, particionado por `fecha_dato`.
     - `rechazados_train`: filas rechazadas con su motivo.
@@ -41,8 +46,11 @@ iac/data-platform/
   glue/      limpieza_train.py            Job de limpieza: bronze -> silver (lo sube s3.tf)
              gold_train.py                Job gold: silver -> gold_train (lo sube s3.tf)
              gold_segment_conversion.py   Job gold: silver -> gold_segment_conversion (lo sube s3.tf)
+             gold_analytics.py            Jobs gold: silver -> las 6 tablas analíticas (lo sube s3.tf)
+             gold_analytics_tables.json   Esquema de las 6 tablas analíticas (lo lee Terraform)
              test_*.py                    Tests PySpark local (sin AWS)
   athena/    01_tablas.sql, 02_calidad.sql   SQL de referencia (las tablas las crea Terraform)
+             03_gold_analitica.sql           Consultas de ejemplo de las tablas analíticas
   terraform/ el módulo
 ```
 
@@ -77,14 +85,26 @@ aws glue get-job-runs --job-name finsir-gold-train --region us-east-1 \
   --max-items 1 --query 'JobRuns[0].JobRunState'
 ```
 
-Ambos jobs gold leen silver, así que córrelos después de que la limpieza tenga
-éxito; son independientes entre sí y pueden correr en paralelo.
+Las seis tablas analíticas se construyen igual, un job por tabla:
+
+```bash
+for t in product-monthly-kpis customer-profile product-penetration \
+         product-affinity product-transitions baseline-popularity; do
+  aws glue start-job-run --job-name "finsir-gold-$t" --region us-east-1
+done
+```
+
+Todos los jobs gold leen silver, así que córrelos después de que la limpieza
+tenga éxito; son independientes entre sí y pueden correr en paralelo. Lo más
+simple es correr la Step Functions completa (`terraform output -raw run_batch`),
+que hace la limpieza y luego los ocho jobs gold en paralelo.
 
 El nombre del bucket y estos comandos también son outputs de Terraform
 (`bucket`, `subir_el_csv`, `ejecutar_la_limpieza`, `run_gold_train`,
-`run_gold_segment_conversion`). `silver_train`, `gold_train` y
-`gold_segment_conversion` quedan consultables en Athena apenas termina su job
-(no hace falta `MSCK REPAIR TABLE`: usan partition projection).
+`run_gold_segment_conversion`, `gold_analytics_jobs`, `gold_analytics_tables`,
+`gold_analytics_paths`). Las tablas silver y gold quedan consultables en Athena
+apenas termina su job (no hace falta `MSCK REPAIR TABLE`: usan partition
+projection).
 
 ## Capa gold: `gold_train`
 
@@ -237,6 +257,125 @@ así que unir `gold_segment_conversion` en `gold_train` por (`fecha_dato`,
 `segmento`, `product`) da una feature que nunca ve las compras ni la etiqueta del
 propio mes `t`. La tasa del primer mes es null.
 
+## Tablas gold analíticas (dashboard y modelo base)
+
+Seis tablas agregadas, pensadas para que el dashboard de Streamlit (vía la API)
+las lea directo, sin cálculos pesados: cada consulta filtrada por un mes trae
+de decenas a pocos miles de filas. Cubren los tres módulos del tablero de la
+propuesta y las actividades 3, 5 y 6 (EDA, matriz de correlación, modelo base de
+popularidad y MAP@7).
+
+| Tabla                         | Grano (una fila por…)                                   | Para qué sirve en el dashboard                                     |
+| ----------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ |
+| `gold_product_monthly_kpis`   | mes × producto                                          | KPIs ejecutivos, tendencias, estacionalidad, ranking de popularidad |
+| `gold_customer_profile`       | mes × segmento × rango de edad × sexo × rango de renta  | Perfilamiento sociodemográfico (módulo exploratorio)               |
+| `gold_product_penetration`    | mes × dimensión × valor × producto                      | Mapas de calor de tenencia por segmento, edad, renta, provincia…   |
+| `gold_product_affinity`       | mes × producto A × producto B                           | Matriz de correlación de productos y venta cruzada (lift)          |
+| `gold_product_transitions`    | mes × producto que tenía × producto que adquirió        | Diagramas de Sankey (módulo de transición de productos)            |
+| `gold_baseline_popularity`    | mes                                                     | Modelo base de popularidad: ranking y su MAP@7 (módulo ejecutivo)  |
+
+Todas viven en `s3://<bucket>/gold/<tabla sin el prefijo gold_>/`, son Parquet
+particionado por `fecha_dato` (string `YYYY-MM-DD`) y las construye
+`glue/gold_analytics.py`, un job de Glue por tabla. El esquema exacto (nombres,
+tipos y descripción de cada columna) está en
+[`glue/gold_analytics_tables.json`](glue/gold_analytics_tables.json): Terraform
+lo lee para crear las tablas de Athena y los tests verifican que coincide con
+lo que escribe el script. Las descripciones también quedan como comentarios de
+columna en el catálogo de Glue. Hay consultas de ejemplo en
+[`athena/03_gold_analitica.sql`](athena/03_gold_analitica.sql).
+
+**Reglas comunes** (las mismas de `gold_train`):
+
+- "Mes anterior/siguiente" es el mes de calendario: si el cliente se salta un
+  mes, no hay dato (nunca se usa una fila más vieja).
+- Un producto nulo cuenta como "no lo tiene".
+- **Alta** del producto `p` en el mes `t`: el cliente tiene fila en `t-1` sin
+  `p` y tiene `p` en `t`. **Baja**: tenía `p` en `t-1` y no en `t`.
+- Una dimensión faltante (segmento, sexo, provincia, edad, renta, antigüedad)
+  se agrupa como `desconocido`. No se imputa nada: los promedios ignoran los
+  nulos (por ejemplo, `avg_renta` solo usa a quienes reportan renta).
+- Los rangos tienen etiquetas que se ordenan solas alfabéticamente:
+  edad `00-17, 18-24, 25-34, 35-44, 45-54, 55-64, 65+`; renta
+  `000-050k, 050-100k, 100-200k, 200-500k, 500k+`; antigüedad en meses
+  `000-006m, 007-012m, 013-036m, 037-060m, 061-120m, 121m+`. El límite inferior
+  entra al rango y el superior no (25 años cae en `25-34`).
+- `segmento` y `sexo` quedan como vienen en el CSV (por ejemplo
+  `02 - PARTICULARES`, `H`/`V`).
+
+### `gold_product_monthly_kpis`
+
+`clients`, `holders` y `penetration_rate` (= holders / clients) describen la
+tenencia del mes. `eligible` son los clientes con fila el mes anterior que no
+tenían el producto; `adds` los que lo adquirieron y `add_rate` = adds /
+eligible. `holders_prev` son los que lo tenían el mes anterior, `drops` los que
+lo soltaron y `drop_rate` = drops / holders_prev. `net_adds` = adds − drops
+(no es la diferencia de `holders` entre meses, porque también entran y salen
+clientes). `popularity_rank` ordena los 24 productos por altas del mes
+(1 = el más adquirido; empates por nombre); es null el primer mes, en el que no
+se pueden observar altas. Las tasas son null cuando el denominador es 0.
+
+### `gold_customer_profile`
+
+Por grupo: `clients`, `active_clients` y `active_rate`, `new_clients`
+(`ind_nuevo = 1`), `avg_age`, `avg_antiguedad_months`, `avg_renta`,
+`median_renta` (aproximada), `renta_known`, `avg_n_products` y
+`clients_without_products`. Para agregar varios grupos (por ejemplo, todo un
+segmento) suma `clients` y pondera los promedios por `clients` (o por
+`renta_known` en el caso de la renta); la mediana no se puede combinar. Ver
+`athena/03_gold_analitica.sql`.
+
+### `gold_product_penetration`
+
+Formato largo, una fila por celda del mapa de calor. `dimension` es una de
+`segmento`, `age_band`, `income_band`, `tenure_band`, `sexo`, `provincia`
+(nombre de la provincia) o `actividad` (`activo`/`inactivo`), y
+`dimension_value` su valor. `penetration_rate` = holders / clients dentro de
+ese valor. Dentro de una misma dimensión, `clients` suma el total de clientes
+del mes.
+
+### `gold_product_affinity`
+
+Para cada par ordenado de productos distintos (24 × 23 = 552 filas por mes):
+`holders_a`, `holders_b`, `holders_both`, `support` (= both / clients),
+`confidence` (= P(B | A) = both / holders_a; no es simétrica), `lift`
+(= confidence / P(B); mayor que 1 significa que se tienen juntos más de lo
+esperado por azar) y `phi` (correlación de Pearson entre las dos banderas 0/1,
+de −1 a 1; es la "matriz de correlación de productos"). `lift` y `phi` son null
+si un producto no lo tiene nadie (o todos).
+
+### `gold_product_transitions`
+
+Para los clientes que adquirieron `to_product` en el mes `t`, qué productos
+tenían en `t-1` (`from_product`; `sin_productos` si no tenían ninguno). Un
+cliente que tenía 3 productos y adquirió 1 aporta 3 enlaces, así que la suma de
+`clients` sobre los orígenes no es el número de altas; ese número está en
+`to_product_adds`, y `share` = clients / to_product_adds es la probabilidad de
+haber tenido `from_product` dado que adquirió `to_product`. Solo se guardan los
+enlaces con al menos un cliente. Los clientes sin fila en `t-1` no aparecen.
+
+### `gold_baseline_popularity`
+
+El modelo base de la propuesta: ofrecer a todos los clientes los mismos
+productos, los más adquiridos. Para cada mes `t`:
+
+1. Ordena los 24 productos por altas en `t` (`popularity_ranking`,
+   `top_7_products`). Solo usa información hasta `t`.
+2. Para cada cliente con fila en `t` y en `t+1`, recomienda los 7 primeros del
+   ranking que **no** tiene en `t`.
+3. Lo compara con lo que de verdad adquirió en `t+1` (`label_fecha_dato`) y
+   calcula AP@7 con la fórmula oficial de Kaggle.
+
+`map_at_7` promedia sobre todos los evaluados (los que no adquieren nada valen 0,
+como en Kaggle); `map_at_7_buyers` solo sobre los que adquirieron algo, y
+`hit_rate_at_7_buyers` es la fracción de ellos con al menos un acierto en su
+top 7. El primer mes no tiene ranking y el último (2016-05-28) no tiene `t+1`:
+sus métricas son null, pero el ranking del último mes es justo el que sirve para
+recomendar en junio 2016.
+
+Con el split de la propuesta, la fila `fecha_dato = '2016-04-28'` es el MAP@7
+del modelo base en el mes de prueba (altas de mayo): la referencia que el modelo
+LightGBM debe superar.
+
 ## Reglas para usar gold_train sin fuga de información
 
 - **Features** son todas las columnas sin el prefijo `label_next_`, incluidas
@@ -260,8 +399,11 @@ propio mes `t`. La tasa del primer mes es null.
 | `existing_glue_role_arn` | `""`    | Reutilizar un rol de Glue existente en vez de crear uno.                                       |
 | `partition_projection`   | `true`  | Autodescubrir las particiones `fecha_dato=...`.                                                |
 | `force_destroy_bucket`   | `false` | Permitir que `terraform destroy` borre un bucket no vacío. Déjalo en `false` con datos reales. |
+| `analytics_number_of_workers` | `5` | Workers de cada job gold analítico (son agregados livianos).                              |
 
-La carpeta de salida gold es `gold_prefix` (default `gold/train/`).
+La carpeta de salida gold es `gold_prefix` (default `gold/train/`). Las tablas
+analíticas quedan en `analytics_root_prefix` + nombre (default
+`gold/<tabla>/`).
 
 La región por defecto es `us-east-1`; `aws ~> 5.80`, Terraform `>= 1.5`.
 
@@ -277,7 +419,15 @@ de EventBridge la dispara según un horario.
   Functions y le pasa la lista de jobs gold como input.
 
 **Agregar una tabla gold nueva:** añade su job a `local.gold_job_names` en
-`main.tf`. El `Map` lo recoge solo; no hay que tocar la state machine.
+`main.tf`. El `Map` lo recoge solo; no hay que tocar la state machine. Las
+tablas analíticas ya entran solas: para sumar otra, agrégala a
+`glue/gold_analytics_tables.json` y a `TABLES` en `glue/gold_analytics.py`, y
+Terraform crea su job, su tabla en Athena y sus permisos.
+
+Con las tablas analíticas el `Map` corre 8 jobs gold a la vez
+(2 × 10 + 6 × 5 = 50 DPU). Si tu cuenta tiene un límite bajo de DPU
+concurrentes y algún job falla por eso, baja `analytics_number_of_workers` o
+`MaxConcurrency` en `stepfunctions.tf`.
 
 | Variable               | Default             | Qué hace                                           |
 | ---------------------- | ------------------- | -------------------------------------------------- |
@@ -333,7 +483,8 @@ aws stepfunctions describe-execution --execution-arn <arn-que-imprime-start-exec
 
 ## Pendiente
 
-Las demás tablas gold (agregados del dashboard, resultados del test) se agregan
+Los agregados del dashboard ya están (tablas analíticas). Faltan las tablas de
+resultados del modelo (predicciones y MAP@7 del LightGBM), que se agregan
 sumando su job a `local.gold_job_names`. El modelo de ML y el dashboard
 Streamlit vienen después.
 
@@ -349,4 +500,10 @@ Los tests de `gold_train` verifican las etiquetas, los lags, las banderas
 features no cambien al agregar meses futuros y que la lista de columnas de la API
 coincida con la del job. Los tests de `gold_segment_conversion` verifican que la
 tasa solo use meses anteriores (nunca el propio), que los segmentos queden
-separados y que las filas sin segmento se descarten.
+separados y que las filas sin segmento se descarten. Los tests de
+`gold_analytics` verifican, con casos calculados a mano, cada tabla (altas,
+bajas, ranking, rangos, penetración, lift y phi, enlaces del Sankey y el MAP@7
+del modelo base), que el ranking no mire el futuro y que el esquema del script
+coincida con `gold_analytics_tables.json` y con los tipos que escribe Spark.
+
+> En Windows, Spark local es lento: los tests pueden tardar de 5 a 20 minutos.

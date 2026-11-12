@@ -53,6 +53,26 @@ output "gold_segment_conversion_path" {
   value       = "s3://${local.bucket_id}/${var.conversion_prefix}"
 }
 
+output "gold_analytics_tables" {
+  description = "Tablas gold analiticas en Athena (vacio si create_athena es false)"
+  value       = var.create_athena ? sort([for t in values(local.analytics_tables) : t.table_name]) : []
+}
+
+output "gold_analytics_jobs" {
+  description = "Job de Glue de cada tabla gold analitica (tabla -> job)"
+  value       = { for k, t in local.analytics_tables : t.table_name => aws_glue_job.gold_analytics[k].name }
+}
+
+output "gold_analytics_paths" {
+  description = "Donde se escribe cada tabla gold analitica (tabla -> ruta S3)"
+  value       = { for k, t in local.analytics_tables : t.table_name => "s3://${local.bucket_id}/${t.prefix}" }
+}
+
+output "gold_jobs_input" {
+  description = "Input JSON de la Step Functions con todos los jobs gold (lo usa deploy.ps1)"
+  value       = jsonencode({ gold_jobs = local.gold_job_names })
+}
+
 output "ruta_silver" {
   description = "Donde queda la capa silver"
   value       = "s3://${local.bucket_id}/${var.silver_prefix}"

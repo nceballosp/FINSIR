@@ -72,6 +72,12 @@ variable "conversion_prefix" {
   default     = "gold/segment_conversion/"
 }
 
+variable "analytics_root_prefix" {
+  description = "Carpeta raiz de las tablas gold analiticas, con barra final. Cada tabla queda en <raiz><tabla>/ (p. ej. gold/product_monthly_kpis/)"
+  type        = string
+  default     = "gold/"
+}
+
 variable "scripts_prefix" {
   description = "Carpeta donde se sube el script de Glue, con barra final"
   type        = string
@@ -108,6 +114,12 @@ variable "number_of_workers" {
   description = "Workers del trabajo (minimo 2). La limpieza reparte los datos por cliente: con mas workers termina antes"
   type        = number
   default     = 10
+}
+
+variable "analytics_number_of_workers" {
+  description = "Workers de cada job gold analitico (minimo 2). Son agregados livianos: con 5 alcanza y cuesta la mitad que la limpieza"
+  type        = number
+  default     = 5
 }
 
 variable "timeout_minutes" {
