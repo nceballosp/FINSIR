@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from app.use_cases.get_client_records import GetClientRecords
+from app.use_cases.list_analytics_month import ListAnalyticsMonth
 from app.use_cases.list_month import ListMonth
 
 
@@ -21,3 +22,8 @@ def get_client_records_use_case(request: Request) -> GetClientRecords:
 def list_month_use_case(request: Request) -> ListMonth:
     """Return the wired :class:`ListMonth` use case."""
     return request.app.state.container.list_month
+
+
+def list_analytics_month_use_case(request: Request) -> ListAnalyticsMonth:
+    """Return the wired :class:`ListAnalyticsMonth` use case."""
+    return request.app.state.container.list_analytics_month

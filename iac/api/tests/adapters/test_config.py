@@ -44,4 +44,5 @@ def test_settings_valid_dev_mode():
         _env_file=None,
     )
     assert settings.athena_table == "gold_train"
+    assert settings.athena_analytics_table_prefix == "gold_"
     assert settings.aws_region == "us-east-1"

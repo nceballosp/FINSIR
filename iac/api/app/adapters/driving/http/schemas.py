@@ -43,6 +43,20 @@ class MonthPageResponse(BaseModel):
     meta: PageMeta
 
 
+class GoldRowResponse(BaseModel):
+    """A single analytical gold row as a flat JSON object, nulls preserved."""
+
+    fecha_dato: Optional[str] = None
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+
+class GoldTablePageResponse(BaseModel):
+    """A paginated page of analytical gold rows for a month."""
+
+    items: list[GoldRowResponse]
+    meta: PageMeta
+
+
 class ErrorBody(BaseModel):
     """The error detail inside the error envelope."""
 

@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 from app.adapters.driving.http.app_factory import create_app
 from app.config import Settings
 from app.container import build_container_from_repository
-from app.domain.entities import ClientRecord, MonthPage
+from app.domain.entities import ClientRecord, GoldRow, GoldTablePage, MonthPage
 from app.domain.errors import InvalidQueryError, RepositoryError
-from app.use_cases.ports import GoldTrainRepository
+from app.use_cases.ports import GoldAnalyticsRepository, GoldTrainRepository
 
 DEV_SECRET = "test-secret-not-a-real-credential"
 AUDIENCE = "finsir-clients"
@@ -61,6 +61,45 @@ class FakeGoldTrainRepository(GoldTrainRepository):
 def make_client_record(ncodpers: int, fecha_dato: str, **values) -> ClientRecord:
     """Build a :class:`ClientRecord` for tests; unset columns stay absent."""
     return ClientRecord(ncodpers=ncodpers, fecha_dato=fecha_dato, values=dict(values))
+
+
+def make_gold_row(fecha_dato: str, **values) -> GoldRow:
+    """Build a :class:`GoldRow` for tests; unset columns stay absent."""
+    return GoldRow(fecha_dato=fecha_dato, values=dict(values))
+
+
+class FakeGoldAnalyticsRepository(GoldAnalyticsRepository):
+    """In-memory analytics repository for tests. Applies filters in memory.
+
+    Keyed by ``(table_key, fecha_dato)``; equality filters on ``values`` are
+    applied so HTTP filter params can be exercised without AWS.
+    """
+
+    def __init__(
+        self,
+        records_by_table_month: Optional[dict[tuple[str, str], list[GoldRow]]] = None,
+        should_raise_repository_error: bool = False,
+    ) -> None:
+        self._records_by_table_month = records_by_table_month or {}
+        self._should_raise_repository_error = should_raise_repository_error
+
+    def list_by_month(
+        self,
+        table_key: str,
+        fecha_dato: str,
+        page: int,
+        size: int,
+        sort: Optional[str] = None,
+        filters: Optional[dict[str, str]] = None,
+    ) -> GoldTablePage:
+        if self._should_raise_repository_error:
+            raise RepositoryError("Simulated infrastructure failure")
+        rows = list(self._records_by_table_month.get((table_key, fecha_dato), []))
+        for column_name, value in (filters or {}).items():
+            rows = [row for row in rows if row.get(column_name) == value]
+        start = (page - 1) * size
+        items = rows[start : start + size]
+        return GoldTablePage(items=items, page=page, size=size, total=len(rows))
 
 
 @pytest.fixture
@@ -115,11 +154,30 @@ def token_without_scope() -> str:
 
 
 @pytest.fixture
-def build_test_client(dev_settings: Settings):
-    """Factory building a TestClient around a given repository."""
+def fake_analytics_repository() -> FakeGoldAnalyticsRepository:
+    """A fake analytics repository seeded with product-kpis + baseline rows."""
+    return FakeGoldAnalyticsRepository(
+        records_by_table_month={
+            ("product_monthly_kpis", "2016-04-28"): [
+                make_gold_row("2016-04-28", product="ind_cco_fin_ult1", adds="100"),
+                make_gold_row("2016-04-28", product="ind_recibo_ult1", adds="80"),
+            ],
+            ("baseline_popularity", "2016-04-28"): [
+                make_gold_row("2016-04-28", total_adds="180", map_at_7="0.1"),
+            ],
+        }
+    )
 
-    def _build(repository: GoldTrainRepository) -> TestClient:
-        container = build_container_from_repository(repository)
+
+@pytest.fixture
+def build_test_client(dev_settings: Settings):
+    """Factory building a TestClient around the given repositories."""
+
+    def _build(
+        repository: GoldTrainRepository,
+        analytics_repository: Optional[GoldAnalyticsRepository] = None,
+    ) -> TestClient:
+        container = build_container_from_repository(repository, analytics_repository)
         app = create_app(settings=dev_settings, container=container)
         return TestClient(app)
 
@@ -127,6 +185,6 @@ def build_test_client(dev_settings: Settings):
 
 
 @pytest.fixture
-def client(build_test_client, fake_repository) -> TestClient:
-    """A TestClient wired to the seeded fake repository."""
-    return build_test_client(fake_repository)
+def client(build_test_client, fake_repository, fake_analytics_repository) -> TestClient:
+    """A TestClient wired to the seeded fake repositories."""
+    return build_test_client(fake_repository, fake_analytics_repository)

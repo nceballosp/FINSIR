@@ -19,17 +19,18 @@ Las dependencias apuntan hacia adentro: `adapters -> use cases -> domain`.
 ```
 app/
   domain/            Entidades + errores tipados. Sin imports de framework.
-  use_cases/         Puerto GoldTrainRepository + los dos casos de uso.
+  use_cases/         Puertos (GoldTrainRepository, GoldAnalyticsRepository) + casos de uso.
   adapters/
-    driving/http/    App FastAPI, routers, auth, logging, manejo de errores.
-    driven/athena/   Repositorio sobre Athena (boto3), validación, mapeo de errores.
+    driving/http/    App FastAPI, routers (gold_train + 6 analíticas), auth, logging, errores.
+    driven/athena/   Repositorios sobre Athena (boto3), runner compartido, validación.
   config.py          Settings desde variables de entorno.
   container.py       Conecta el adapter de Athena a los casos de uso.
   main.py            Punto de entrada (uvicorn app.main:app).
 ```
 
-Todo el código boto3/Athena vive detrás del puerto `GoldTrainRepository`, así que
-los tests usan un repositorio falso y no hacen llamadas a AWS.
+Todo el código boto3/Athena vive detrás de los puertos `GoldTrainRepository` y
+`GoldAnalyticsRepository`, así que los tests usan repositorios falsos y no hacen
+llamadas a AWS.
 
 ## Endpoints
 
@@ -46,14 +47,39 @@ conservados). Las columnas que empiezan con `label_next_` son las respuestas del
 modelo, no features; las banderas `added_<product>` sí son features (el producto
 se adquirió este mes).
 
-Las respuestas exitosas envuelven los datos en `data`; los errores usan
-`{error.code, error.message, correlationId}` y nunca filtran detalles internos.
+### Tablas gold analíticas
+
+Las 6 tablas analíticas (`gold_<key>`) están particionadas por `fecha_dato` y se
+exponen con un endpoint de listado por mes cada una, con la misma forma que el de
+`gold_train`:
+
+| Método | Ruta                                               | Auth | Filtros de igualdad (query)                   |
+| ------ | -------------------------------------------------- | ---- | --------------------------------------------- |
+| GET    | `/v1/gold/product-kpis/months/{fecha_dato}`        | sí   | `product`                                     |
+| GET    | `/v1/gold/customer-profiles/months/{fecha_dato}`   | sí   | `segmento`, `age_band`, `sexo`, `income_band` |
+| GET    | `/v1/gold/product-penetration/months/{fecha_dato}` | sí   | `dimension`, `dimension_value`, `product`     |
+| GET    | `/v1/gold/product-affinity/months/{fecha_dato}`    | sí   | `product_a`, `product_b`                      |
+| GET    | `/v1/gold/product-transitions/months/{fecha_dato}` | sí   | `from_product`, `to_product`                  |
+| GET    | `/v1/gold/baseline-popularity/months/{fecha_dato}` | sí   | (ninguno)                                     |
+
+Cada endpoint acepta `page` (>= 1), `size` (1..200), `sort` (una columna de esa
+tabla o `fecha_dato`) y sus filtros de igualdad opcionales. Cada fila vuelve como
+`fecha_dato` y un objeto `attributes` con las columnas de la tabla (valores como
+strings, nulls conservados). Los nombres físicos en Athena son `gold_<key>` (ej.
+`gold_product_monthly_kpis`); las columnas están documentadas en
+[`../data-platform/glue/gold_analytics_tables.json`](../data-platform/glue/gold_analytics_tables.json).
+
+Las respuestas exitosas envuelven los datos en `data` (con `meta` de paginación);
+los errores usan `{error.code, error.message, correlationId}` y nunca filtran
+detalles internos.
 
 ```bash
 TOKEN="<bearer-jwt>"
 BASE="http://<task-ip>:8080"
 curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/train/clients/1375586"
 curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/train/months/2016-04-28?page=1&size=50"
+curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/product-kpis/months/2016-04-28?sort=popularity_rank"
+curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/product-affinity/months/2016-05-28?product_a=ind_cno_fin_ult1"
 ```
 
 ## Auth
@@ -70,18 +96,19 @@ Token ausente/inválido → 401; scope equivocado → 403. El token nunca se log
 
 ## Variables de entorno
 
-| Variable                                                   | ¿Necesaria? | Para qué                             |
-| ---------------------------------------------------------- | ----------- | ------------------------------------ |
-| `ATHENA_DATABASE`                                          | sí          | Base de datos de Glue (ej. `finsir`) |
-| `ATHENA_WORKGROUP`                                         | sí          | Workgroup de Athena                  |
-| `ATHENA_OUTPUT`                                            | sí          | URI de S3 para resultados de Athena  |
-| `ATHENA_TABLE`                                             | no          | Tabla gold (default `gold_train`)    |
-| `AWS_REGION`                                               | no          | Región (default `us-east-1`)         |
-| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod        | Validación de tokens RS256           |
-| `AUTH_REQUIRED_SCOPE`                                      | no          | Scope requerido para rutas de datos  |
-| `IS_AUTH_DEV_MODE`                                         | no          | `true` activa el modo dev HS256      |
-| `AUTH_DEV_SECRET`                                          | dev         | Secreto HS256 (modo dev)             |
-| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no          | Metadata de logs                     |
+| Variable                                                   | ¿Necesaria? | Para qué                                           |
+| ---------------------------------------------------------- | ----------- | -------------------------------------------------- |
+| `ATHENA_DATABASE`                                          | sí          | Base de datos de Glue (ej. `finsir`)               |
+| `ATHENA_WORKGROUP`                                         | sí          | Workgroup de Athena                                |
+| `ATHENA_OUTPUT`                                            | sí          | URI de S3 para resultados de Athena                |
+| `ATHENA_TABLE`                                             | no          | Tabla gold (default `gold_train`)                  |
+| `ATHENA_ANALYTICS_TABLE_PREFIX`                            | no          | Prefijo de las tablas analíticas (default `gold_`) |
+| `AWS_REGION`                                               | no          | Región (default `us-east-1`)                       |
+| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod        | Validación de tokens RS256                         |
+| `AUTH_REQUIRED_SCOPE`                                      | no          | Scope requerido para rutas de datos                |
+| `IS_AUTH_DEV_MODE`                                         | no          | `true` activa el modo dev HS256                    |
+| `AUTH_DEV_SECRET`                                          | dev         | Secreto HS256 (modo dev)                           |
+| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no          | Metadata de logs                                   |
 
 El modo dev necesita `AUTH_DEV_SECRET`; prod necesita JWKS/audience/issuer. La
 app falla de inmediato si falta un valor requerido.

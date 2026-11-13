@@ -15,7 +15,7 @@ from app.adapters.driving.http.auth import JwtValidator
 from app.adapters.driving.http.correlation import CorrelationIdMiddleware
 from app.adapters.driving.http.exception_handler import register_exception_handlers
 from app.adapters.driving.http.logging_config import configure_logging
-from app.adapters.driving.http.routers import gold_train, health
+from app.adapters.driving.http.routers import gold_analytics, gold_train, health
 from app.config import Settings
 from app.container import Container, build_container
 
@@ -58,4 +58,6 @@ def create_app(
 
     app.include_router(health.router)
     app.include_router(gold_train.router)
+    for analytics_router in gold_analytics.build_analytics_routers():
+        app.include_router(analytics_router)
     return app

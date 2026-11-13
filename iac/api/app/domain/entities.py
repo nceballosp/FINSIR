@@ -144,3 +144,221 @@ _ENTITY_FIELD_NAMES = {f.name for f in fields(ClientRecord)}
 assert "ncodpers" in _ENTITY_FIELD_NAMES
 assert "fecha_dato" in _ENTITY_FIELD_NAMES
 assert len(GOLD_TRAIN_COLUMN_NAMES) == 169
+
+
+# --- Analytical gold tables (partitioned by fecha_dato, no ncodpers grain) ---
+#
+# The six ``gold_<key>`` analytical tables share one listing shape: a month
+# (``fecha_dato``) partition, a set of string/number columns returned by Athena
+# as strings, and a handful of equality filters. They are modelled with a
+# generic row/page pair and an immutable registry mirroring
+# ``iac/data-platform/glue/gold_analytics_tables.json`` (the source of truth),
+# the same way ``GOLD_TRAIN_COLUMN_NAMES`` mirrors the gold Glue job.
+
+EXPECTED_ANALYTICS_TABLE_COUNT = 6
+
+
+@dataclass(frozen=True)
+class GoldRow:
+    """A single analytical gold row for one ``fecha_dato`` month.
+
+    The row has no ``ncodpers`` grain. A ``None`` value means the datum is
+    missing in the source; the domain never fabricates a default.
+
+    Attributes:
+        fecha_dato: The partition month in ``YYYY-MM-DD`` form.
+        values: Table columns keyed by column name. Explicit ``None`` values
+            are preserved; absent columns are simply not present.
+    """
+
+    fecha_dato: Optional[str] = None
+    values: dict[str, Any] = field(default_factory=dict)
+
+    def get(self, column_name: str) -> Any:
+        """Return the value of ``column_name`` or ``None`` when absent.
+
+        Args:
+            column_name: A column name of the table.
+
+        Returns:
+            The stored value, or ``None`` when the column is absent. No default
+            is fabricated.
+        """
+        if column_name == "fecha_dato":
+            return self.fecha_dato
+        return self.values.get(column_name)
+
+    def as_dict(self, column_names: tuple[str, ...]) -> dict[str, Any]:
+        """Return the row as a flat dict in the given column order.
+
+        Args:
+            column_names: Column names defining the output order. ``fecha_dato``
+                is handled transparently when present in the list.
+
+        Returns:
+            A dict mapping each requested column to its value, preserving nulls.
+        """
+        return {name: self.get(name) for name in column_names}
+
+
+@dataclass(frozen=True)
+class GoldTablePage:
+    """A paginated page of analytical rows for a single ``fecha_dato`` month.
+
+    Attributes:
+        items: The rows on this page.
+        page: 1-based page number.
+        size: Page size requested.
+        total: Total rows available for the month (across all pages).
+    """
+
+    items: list[GoldRow]
+    page: int
+    size: int
+    total: int
+
+    @property
+    def has_next_page(self) -> bool:
+        """Whether a further page exists after this one."""
+        return self.page * self.size < self.total
+
+
+@dataclass(frozen=True)
+class AnalyticsTable:
+    """Immutable metadata describing one analytical gold table.
+
+    Attributes:
+        key: The table key (e.g. ``product_monthly_kpis``). The physical Athena
+            table name is ``<prefix><key>`` (``gold_product_monthly_kpis``).
+        columns: The table columns in JSON order (excludes the ``fecha_dato``
+            partition, which the JSON schema does not list).
+        filter_columns: Columns allowed as equality filters at the API boundary.
+    """
+
+    key: str
+    columns: tuple[str, ...]
+    filter_columns: tuple[str, ...]
+
+    @property
+    def sortable_columns(self) -> frozenset[str]:
+        """Allow-list of columns a caller may sort by (columns + fecha_dato)."""
+        return frozenset(self.columns + ("fecha_dato",))
+
+
+def _analytics_table(
+    key: str, columns: tuple[str, ...], filter_columns: tuple[str, ...]
+) -> AnalyticsTable:
+    """Build an :class:`AnalyticsTable`, asserting filters are real columns."""
+    for filter_column in filter_columns:
+        assert filter_column in columns, (
+            f"Filter column {filter_column!r} is not a column of {key!r}"
+        )
+    return AnalyticsTable(key=key, columns=columns, filter_columns=filter_columns)
+
+
+# Registry mirroring ``gold_analytics_tables.json`` (columns in JSON order) with
+# the per-table equality filter allow-lists derived from each table's grain and
+# the example queries in ``03_gold_analitica.sql``.
+ANALYTICS_TABLES: dict[str, AnalyticsTable] = {
+    "product_monthly_kpis": _analytics_table(
+        "product_monthly_kpis",
+        (
+            "product",
+            "product_name",
+            "clients",
+            "holders",
+            "penetration_rate",
+            "eligible",
+            "adds",
+            "add_rate",
+            "holders_prev",
+            "drops",
+            "drop_rate",
+            "net_adds",
+            "popularity_rank",
+        ),
+        ("product",),
+    ),
+    "customer_profile": _analytics_table(
+        "customer_profile",
+        (
+            "segmento",
+            "age_band",
+            "sexo",
+            "income_band",
+            "clients",
+            "active_clients",
+            "active_rate",
+            "new_clients",
+            "avg_age",
+            "avg_antiguedad_months",
+            "avg_renta",
+            "median_renta",
+            "renta_known",
+            "avg_n_products",
+            "clients_without_products",
+        ),
+        ("segmento", "age_band", "sexo", "income_band"),
+    ),
+    "product_penetration": _analytics_table(
+        "product_penetration",
+        (
+            "dimension",
+            "dimension_value",
+            "product",
+            "product_name",
+            "clients",
+            "holders",
+            "penetration_rate",
+        ),
+        ("dimension", "dimension_value", "product"),
+    ),
+    "product_affinity": _analytics_table(
+        "product_affinity",
+        (
+            "product_a",
+            "product_a_name",
+            "product_b",
+            "product_b_name",
+            "clients",
+            "holders_a",
+            "holders_b",
+            "holders_both",
+            "support",
+            "confidence",
+            "lift",
+            "phi",
+        ),
+        ("product_a", "product_b"),
+    ),
+    "product_transitions": _analytics_table(
+        "product_transitions",
+        (
+            "from_product",
+            "from_product_name",
+            "to_product",
+            "to_product_name",
+            "clients",
+            "to_product_adds",
+            "share",
+        ),
+        ("from_product", "to_product"),
+    ),
+    "baseline_popularity": _analytics_table(
+        "baseline_popularity",
+        (
+            "total_adds",
+            "top_7_products",
+            "popularity_ranking",
+            "label_fecha_dato",
+            "clients_evaluated",
+            "clients_with_adds",
+            "map_at_7",
+            "map_at_7_buyers",
+            "hit_rate_at_7_buyers",
+        ),
+        (),
+    ),
+}
+
+assert len(ANALYTICS_TABLES) == EXPECTED_ANALYTICS_TABLE_COUNT

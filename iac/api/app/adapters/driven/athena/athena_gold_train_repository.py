@@ -1,8 +1,10 @@
 """Athena-backed :class:`GoldTrainRepository` using boto3.
 
-Isolation: all boto3/Athena details live here. Infrastructure failures are
-translated into :class:`RepositoryError` and invalid inputs into
-:class:`InvalidQueryError` so the use cases never see botocore types.
+Isolation: all boto3/Athena execution is delegated to
+:class:`AthenaQueryRunner`; this adapter only builds the ``gold_train`` SQL and
+maps rows to :class:`ClientRecord`. Infrastructure failures surface as
+:class:`RepositoryError` and invalid inputs as :class:`InvalidQueryError`, so
+the use cases never see botocore types.
 
 SQL-injection defense: the boto3 Athena API has no bind-parameter support for
 ad-hoc queries, so strict typed validation is the control. ``ncodpers`` must be
@@ -15,21 +17,19 @@ passing validation.
 
 from __future__ import annotations
 
-import re
-import time
 from typing import Any, Optional
 
-from botocore.exceptions import BotoCoreError, ClientError
-
+from app.adapters.driven.athena.athena_query_runner import (
+    MAX_POLL_ATTEMPTS,
+    POLL_INTERVAL_SECONDS,
+    AthenaQueryRunner,
+    validate_fecha_dato,
+    validate_positive,
+)
 from app.domain.entities import GOLD_TRAIN_COLUMN_NAMES, ClientRecord, MonthPage
-from app.domain.errors import InvalidQueryError, RepositoryError
+from app.domain.errors import InvalidQueryError
 from app.use_cases.ports import GoldTrainRepository
 
-FECHA_DATO_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-TERMINAL_FAILURE_STATES = frozenset({"FAILED", "CANCELLED"})
-SUCCEEDED_STATE = "SUCCEEDED"
-POLL_INTERVAL_SECONDS = 0.5
-MAX_POLL_ATTEMPTS = 120
 _SORTABLE_COLUMNS = frozenset(GOLD_TRAIN_COLUMN_NAMES)
 
 
@@ -46,13 +46,16 @@ class AthenaGoldTrainRepository(GoldTrainRepository):
         poll_interval_seconds: float = POLL_INTERVAL_SECONDS,
         max_poll_attempts: int = MAX_POLL_ATTEMPTS,
     ) -> None:
-        self._client = athena_client
+        self._runner = AthenaQueryRunner(
+            athena_client=athena_client,
+            database=database,
+            workgroup=workgroup,
+            output_location=output_location,
+            poll_interval_seconds=poll_interval_seconds,
+            max_poll_attempts=max_poll_attempts,
+        )
         self._database = database
-        self._workgroup = workgroup
-        self._output_location = output_location
         self._table = table
-        self._poll_interval_seconds = poll_interval_seconds
-        self._max_poll_attempts = max_poll_attempts
 
     def get_client_records(self, ncodpers: int) -> list[ClientRecord]:
         """Return all gold_train records for a client, ordered by month."""
@@ -61,7 +64,7 @@ class AthenaGoldTrainRepository(GoldTrainRepository):
             f"SELECT * FROM {self._qualified_table} "
             f"WHERE ncodpers = {safe_id} ORDER BY fecha_dato"
         )
-        rows = self._run_query(query)
+        rows = self._runner.run_query(query)
         return [self._to_record(row) for row in rows]
 
     def list_by_month(
@@ -82,9 +85,9 @@ class AthenaGoldTrainRepository(GoldTrainRepository):
           per-month scale; revisit (e.g. keyset pagination) if month listings
           grow large or are requested frequently.
         """
-        safe_date = self._validate_fecha_dato(fecha_dato)
-        safe_page = self._validate_positive(page, "page")
-        safe_size = self._validate_positive(size, "size")
+        safe_date = validate_fecha_dato(fecha_dato)
+        safe_page = validate_positive(page, "page")
+        safe_size = validate_positive(size, "size")
         order_clause = self._build_order_clause(sort)
         offset = (safe_page - 1) * safe_size
 
@@ -96,7 +99,7 @@ class AthenaGoldTrainRepository(GoldTrainRepository):
             f"WHERE fecha_dato = '{safe_date}'{order_clause} "
             f"OFFSET {offset} LIMIT {safe_size}"
         )
-        rows = self._run_query(query)
+        rows = self._runner.run_query(query)
         items = [self._to_record(row) for row in rows]
         return MonthPage(items=items, page=safe_page, size=safe_size, total=total)
 
@@ -111,7 +114,7 @@ class AthenaGoldTrainRepository(GoldTrainRepository):
             f"SELECT COUNT(*) AS total FROM {self._qualified_table} "
             f"WHERE fecha_dato = '{fecha_dato}'"
         )
-        rows = self._run_query(query)
+        rows = self._runner.run_query(query)
         if not rows:
             return 0
         raw_total = rows[0].get("total")
@@ -127,19 +130,6 @@ class AthenaGoldTrainRepository(GoldTrainRepository):
         return ncodpers
 
     @staticmethod
-    def _validate_fecha_dato(fecha_dato: str) -> str:
-        """Validate the month matches ``YYYY-MM-DD`` (injection guard)."""
-        if not isinstance(fecha_dato, str) or not FECHA_DATO_PATTERN.match(fecha_dato):
-            raise InvalidQueryError("fecha_dato must match YYYY-MM-DD")
-        return fecha_dato
-
-    @staticmethod
-    def _validate_positive(value: int, field_name: str) -> int:
-        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-            raise InvalidQueryError(f"{field_name} must be a positive integer")
-        return value
-
-    @staticmethod
     def _build_order_clause(sort: Optional[str]) -> str:
         """Return a safe ORDER BY clause, whitelisting the sort column."""
         if sort is None:
@@ -147,60 +137,6 @@ class AthenaGoldTrainRepository(GoldTrainRepository):
         if sort not in _SORTABLE_COLUMNS:
             raise InvalidQueryError(f"Unknown sort column: {sort}")
         return f" ORDER BY {sort}"
-
-    def _run_query(self, query: str) -> list[dict[str, Any]]:
-        """Execute a query and return its rows as column-keyed dicts."""
-        try:
-            execution_id = self._start(query)
-            self._wait(execution_id)
-            return self._fetch_rows(execution_id)
-        except (ClientError, BotoCoreError) as error:
-            raise RepositoryError("Athena request failed") from error
-
-    def _start(self, query: str) -> str:
-        response = self._client.start_query_execution(
-            QueryString=query,
-            QueryExecutionContext={"Database": self._database},
-            WorkGroup=self._workgroup,
-            ResultConfiguration={"OutputLocation": self._output_location},
-        )
-        return response["QueryExecutionId"]
-
-    def _wait(self, execution_id: str) -> None:
-        for _ in range(self._max_poll_attempts):
-            response = self._client.get_query_execution(QueryExecutionId=execution_id)
-            status = response["QueryExecution"]["Status"]
-            state = status["State"]
-            if state == SUCCEEDED_STATE:
-                return
-            if state in TERMINAL_FAILURE_STATES:
-                reason = status.get("StateChangeReason", "unknown reason")
-                raise RepositoryError(f"Athena query {state}: {reason}")
-            time.sleep(self._poll_interval_seconds)
-        raise RepositoryError("Athena query timed out")
-
-    def _fetch_rows(self, execution_id: str) -> list[dict[str, Any]]:
-        """Read result rows, mapping the header row to column names.
-
-        The first row returned by ``get_query_results`` is the header; empty or
-        absent cells become ``None`` so a missing datum is never fabricated.
-        """
-        result = self._client.get_query_results(QueryExecutionId=execution_id)
-        result_set = result.get("ResultSet", {})
-        raw_rows = result_set.get("Rows", [])
-        if not raw_rows:
-            return []
-
-        header = [cell.get("VarCharValue") for cell in raw_rows[0].get("Data", [])]
-        rows: list[dict[str, Any]] = []
-        for raw_row in raw_rows[1:]:
-            cells = raw_row.get("Data", [])
-            row: dict[str, Any] = {}
-            for index, column_name in enumerate(header):
-                value = cells[index].get("VarCharValue") if index < len(cells) else None
-                row[column_name] = value if value not in ("", None) else None
-            rows.append(row)
-        return rows
 
     @staticmethod
     def _to_record(row: dict[str, Any]) -> ClientRecord:

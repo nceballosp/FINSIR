@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_AWS_REGION = "us-east-1"
 DEFAULT_GOLD_TABLE = "gold_train"
+DEFAULT_ANALYTICS_TABLE_PREFIX = "gold_"
 DEFAULT_SERVICE_NAME = "finsir-service"
 DEFAULT_SERVICE_VERSION = "0.1.0"
 DEFAULT_SERVICE_ENVIRONMENT = "local"
@@ -27,6 +28,9 @@ class Settings(BaseSettings):
         athena_workgroup: Athena workgroup used to run queries.
         athena_output: S3 URI where Athena writes query results.
         athena_table: Gold table name (defaults to ``gold_train``).
+        athena_analytics_table_prefix: Prefix prepended to each analytical
+            table key to form its Athena name (defaults to ``gold_``), e.g.
+            ``product_monthly_kpis`` -> ``gold_product_monthly_kpis``.
         aws_region: AWS region for the Athena/boto3 clients.
 
     Auth (JWT validated inside FastAPI, never via API Gateway):
@@ -51,6 +55,7 @@ class Settings(BaseSettings):
     athena_workgroup: str = ""
     athena_output: str = ""
     athena_table: str = DEFAULT_GOLD_TABLE
+    athena_analytics_table_prefix: str = DEFAULT_ANALYTICS_TABLE_PREFIX
     aws_region: str = DEFAULT_AWS_REGION
 
     auth_issuer: Optional[str] = None
