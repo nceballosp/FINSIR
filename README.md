@@ -16,10 +16,10 @@ probable que un cliente adquiera el mes siguiente y devuelve un ranking Top-K
 Dos piezas, ambas con Terraform sobre AWS (`us-east-1`, `aws ~> 5.80`,
 Terraform `>= 1.5`):
 
-| Pieza               | Carpeta              | Qué hace                                                                          |
-| ------------------- | -------------------- | --------------------------------------------------------------------------------- |
+| Pieza               | Carpeta              | Qué hace                                                                                                                 |
+| ------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Plataforma de datos | `iac/data-platform/` | Data lake en S3 + jobs de Glue (limpieza y 8 tablas gold) + tablas en Athena + orquestación (Step Functions/EventBridge) |
-| API                 | `iac/api/`           | FastAPI que lee la tabla gold de entrenamiento desde Athena, corre en ECS Fargate |
+| API                 | `iac/api/`           | FastAPI que lee las tablas gold (entrenamiento + 6 analíticas) desde Athena, corre en ECS Fargate                        |
 
 ## Cómo fluyen los datos
 

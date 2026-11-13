@@ -1,11 +1,14 @@
 # API FINSIR (servicio gold)
 
-Servicio FastAPI que sirve la tabla gold de entrenamiento de FINSIR. Consulta
-Athena (`gold_train`) y lee la info de la tabla desde el catálogo de Glue. Corre
-en AWS ECS Fargate en `http://<task-ip>:8080` (HTTP plano, sin balanceador de
-carga). Un JWT bearer se valida dentro de FastAPI (no hay API Gateway). Las
-columnas están documentadas en
-[`../data-platform/README.md`](../data-platform/README.md#capa-gold-gold_train).
+Servicio FastAPI que sirve las tablas gold de FINSIR: la tabla de entrenamiento
+(`gold_train`) y las seis tablas analíticas del dashboard. Consulta Athena y lee
+la info de cada tabla desde el catálogo de Glue. Corre en AWS ECS Fargate en
+`http://<task-ip>:8080` (HTTP plano, sin balanceador de carga). Un JWT bearer se
+valida dentro de FastAPI (no hay API Gateway). Las columnas están documentadas en
+[`../data-platform/README.md`](../data-platform/README.md#capa-gold-gold_train)
+(entrenamiento) y en
+[`../data-platform/README.md`](../data-platform/README.md#tablas-gold-analíticas-dashboard-y-modelo-base)
+(analíticas).
 
 > ¿Solo quieres desplegar rápido? Hay un script interactivo
 > (`deploy.sh` / `deploy.ps1`) que construye la imagen, la sube a ECR y aplica

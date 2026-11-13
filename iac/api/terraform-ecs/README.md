@@ -18,7 +18,9 @@ con IP pública y sin balanceador de carga.
 - Security group — abierto en TCP 8080 a todo el mundo
 - Log group `/ecs/finsir-api`
 
-Reutiliza el repo ECR `finsir-api` existente (no crea uno).
+Usa el repo ECR `finsir-api` (este Terraform no lo gestiona). El script
+`iac/api/deploy.sh` lo crea si no existe antes de subir la imagen; `iac/destroy.sh`
+puede borrarlo al final del derribo.
 
 ## Deploy (manual)
 
@@ -57,16 +59,28 @@ curl "http://$IP:8080/health"
 python - <<'PY'
 import jwt, time
 secret = "<tu auth_dev_secret>"
+now = int(time.time())
+# iat/nbf retrasados ~120s evitan el 401 por desfase de reloj (ver nota abajo).
 print(jwt.encode({"sub":"demo","scope":"gold:read",
-                  "exp":int(time.time())+3600}, secret, algorithm="HS256"))
+                  "iat":now-120, "nbf":now-120, "exp":now+3600},
+                 secret, algorithm="HS256"))
 PY
 TOKEN=<token>
+# Tabla de entrenamiento
 curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/gold/train/clients/1"
+# Tablas analíticas (una por recurso; ver la lista completa en ../README.md#endpoints)
+curl -H "Authorization: Bearer $TOKEN" "http://$IP:8080/v1/gold/product-kpis/months/2016-04-28"
 ```
 
 El tráfico es HTTP plano en el puerto 8080 (sin TLS). El token no necesita
 `aud`/`iss` porque este deploy deja `AUTH_AUDIENCE`/`AUTH_ISSUER` sin definir; si
 defines alguno, los tokens deben incluir el claim correspondiente o reciben 401.
+
+> **Desfase de reloj.** Si el reloj de la task Fargate va por delante del tuyo,
+> un token recién generado tiene `iat`/`nbf` en el futuro para el servidor y la
+> validación lo rechaza con 401 hasta que el tiempo lo alcanza. Generar el token
+> con `iat`/`nbf` retrasados unos segundos (como arriba) lo evita. No es un fallo
+> de la API.
 
 ## Derribar
 
