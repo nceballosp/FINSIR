@@ -2,10 +2,10 @@
 """Train the full FINSIR next-product recommendation model from S3 Gold.
 
 The script is intended for an EC2 training instance with an instance profile.
-It reads partitioned Parquet directly from S3 with DuckDB, trains the family
-selected in the sample notebook, evaluates it against the popularity baseline
-on temporal validation and a held-out test month, then refits the final
-artifact for inference on the latest Gold month.
+It reads partitioned Parquet directly from S3 with DuckDB, trains one
+multiclass LightGBM model, selects parameters by temporal validation MAP@7,
+evaluates against the popularity baseline on a held-out test month, then
+refits the final artifact for inference on the latest Gold month.
 
 Example:
     python train.py --bucket finsir-670099380322 --region us-east-1 \
@@ -32,34 +32,37 @@ import joblib
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import average_precision_score, log_loss
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 LOG = logging.getLogger("finsir.train")
 LABEL_PREFIX = "label_next_"
 K = 7
 RANDOM_STATE = 42
 
-# This small grid is intentionally bounded for repeatable EC2 runs. The best
-# configuration is chosen only from temporal validation, never from test.
+# Tune ranking-relevant LightGBM settings on temporal validation only.
 PARAMETER_GRID = (
-    {"num_leaves": 15, "min_child_samples": 80},
-    {"num_leaves": 31, "min_child_samples": 50},
-    {"num_leaves": 31, "min_child_samples": 100},
+    {"num_leaves": 31, "min_data_in_leaf": 20, "learning_rate": 0.05,
+     "feature_fraction": 0.8},
+    {"num_leaves": 64, "min_data_in_leaf": 10, "learning_rate": 0.1,
+     "feature_fraction": 0.8},
+    {"num_leaves": 64, "min_data_in_leaf": 25, "learning_rate": 0.05,
+     "feature_fraction": 0.9},
+    {"num_leaves": 96, "min_data_in_leaf": 10, "learning_rate": 0.05,
+     "feature_fraction": 0.8},
 )
 BASE_PARAMS = {
-    "objective": "binary",
-    "n_estimators": 500,
-    "learning_rate": 0.05,
-    "subsample": 0.8,
-    "subsample_freq": 1,
-    "colsample_bytree": 0.8,
-    "reg_lambda": 1.0,
+    "task": "train",
+    "boosting_type": "gbdt",
+    "objective": "multiclass",
+    "num_class": 24,
+    "metric": "multi_logloss",
+    "is_training_metric": True,
+    "max_bin": 255,
+    "num_leaves": 64,
+    "learning_rate": 0.1,
+    "feature_fraction": 0.8,
+    "min_data_in_leaf": 10,
+    "min_sum_hessian_in_leaf": 5,
+    "n_estimators": 1000,
     "random_state": RANDOM_STATE,
     "n_jobs": -1,
     "verbosity": -1,
@@ -74,9 +77,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default="./artifacts")
     parser.add_argument("--artifact-s3-uri", default=None,
                         help="Optional S3 object URI for the finished artifact")
-    parser.add_argument("--model-family", choices=("lightgbm", "logistic_regression", "random_forest"),
+    parser.add_argument("--model-family", choices=("lightgbm",),
                         default="lightgbm",
-                        help="Set to the learned family selected in the sample notebook")
+                        help="Multiclass LightGBM product recommender")
     parser.add_argument("--aws-profile", default=None,
                         help="Optional local AWS profile; omit on EC2")
     parser.add_argument("--duckdb-memory-limit", default="80GB")
@@ -323,89 +326,67 @@ def lgbm_params(config: dict[str, Any], n_estimators: int | None = None):
     return params
 
 
-def score_product(model, frame, cols, categories, product):
-    eligible = frame.loc[frame[product].fillna(0).eq(0)]
-    scores = pd.Series(0.0, index=frame.index, dtype="float32")
-    if eligible.empty:
-        return scores
-    if categories is None:
-        x = eligible[cols]
-    else:
-        x, _ = prepare_xy(eligible, cols, categories)
-    scores.loc[eligible.index] = model.predict_proba(x)[:, 1].astype("float32")
+def expand_product_targets(frame: pd.DataFrame, products: list[str],
+                           label_cols: list[str], cols: list[str],
+                           categories=None):
+    """Expand each customer-month once per newly acquired product.
+
+    This lets a multiclass learner learn the distribution of acquisition
+    events while validation still measures all simultaneous additions.
+    Each source row has total weight one, regardless of its number of labels.
+    """
+    held = frame[products].fillna(0).to_numpy(dtype=np.float32) == 1
+    targets = frame[label_cols].fillna(0).to_numpy(dtype=np.int8) == 1
+    targets &= ~held
+    row_idx, class_idx = np.where(targets)
+    if len(row_idx) == 0:
+        raise ValueError("No hay adquisiciones de productos para entrenar")
+    x = frame.iloc[row_idx][cols].reset_index(drop=True)
+    x, stored_categories = prepare_xy(x, cols, categories)
+    weights = 1.0 / np.bincount(row_idx, minlength=len(frame))[row_idx]
+    return x, class_idx.astype("int32"), weights.astype("float32"), stored_categories
+
+
+def score_multiclass(model, frame, cols, products, categories):
+    x, _ = prepare_xy(frame, cols, categories)
+    probabilities = model.predict_proba(x).astype("float32")
+    scores = pd.DataFrame(0.0, index=frame.index, columns=products,
+                          dtype="float32")
+    for output_col, class_idx in enumerate(model.classes_):
+        if 0 <= int(class_idx) < len(products):
+            scores.iloc[:, int(class_idx)] = probabilities[:, output_col]
+    held = frame[products].fillna(0).to_numpy(dtype=np.float32) == 1
+    scores.values[held] = 0.0
     return scores
 
 
-def make_sklearn_pipeline(family: str, frame: pd.DataFrame, cols: list[str]):
-    numeric = frame[cols].select_dtypes(
-        exclude=["object", "string", "category"]
-    ).columns.tolist()
-    categorical = [col for col in cols if col not in numeric]
-    numeric_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scale", StandardScaler(with_mean=False)),
-    ])
-    categorical_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore", min_frequency=25)),
-    ])
-    transformer = ColumnTransformer([
-        ("numeric", numeric_pipeline, numeric),
-        ("categorical", categorical_pipeline, categorical),
-    ], sparse_threshold=0.3)
-    if family == "logistic_regression":
-        estimator = LogisticRegression(
-            C=0.1, max_iter=250, solver="lbfgs", n_jobs=-1)
-    elif family == "random_forest":
-        estimator = RandomForestClassifier(
-            n_estimators=80, max_depth=12, min_samples_leaf=25,
-            max_features="sqrt", n_jobs=-1, random_state=RANDOM_STATE,
-        )
-    else:
-        raise ValueError(f"Familia sklearn no soportada: {family}")
-    return Pipeline([("preprocessor", transformer), ("model", estimator)])
-
-
-def fit_product(family: str, frame: pd.DataFrame, evaluation: pd.DataFrame,
-                product: str, cols: list[str], config: dict[str, Any]):
-    if family == "lightgbm":
-        return fit_lgbm_product(frame, evaluation, product, cols, config,
-                                early_stopping=True)
-    label = f"{LABEL_PREFIX}{product}"
-    eligible = frame.loc[frame[product].fillna(0).eq(0)]
-    if eligible.empty or eligible[label].nunique() < 2:
-        return None, None, 0
-    model = make_sklearn_pipeline(family, eligible, cols)
-    model.fit(eligible[cols], eligible[label].astype("int8"))
-    return model, None, 0
-
-
-def fit_lgbm_product(frame, evaluation, product, cols, config,
-                     early_stopping: bool = True):
-    label = f"{LABEL_PREFIX}{product}"
-    eligible_train = frame.loc[frame[product].fillna(0).eq(0)]
-    eligible_eval = evaluation.loc[evaluation[product].fillna(0).eq(0)]
-    y_train = eligible_train[label].astype("int8")
-    if y_train.nunique() < 2 or eligible_eval.empty:
-        return None, None, 0
-
-    x_train, categories = prepare_xy(eligible_train, cols)
-    x_eval, _ = prepare_xy(eligible_eval, cols, categories)
+def fit_lgbm_multiclass(frame, evaluation, products, label_cols, cols,
+                        config, early_stopping=True):
+    x_train, y_train, weights, categories = expand_product_targets(
+        frame, products, label_cols, cols)
+    missing_classes = sorted(set(range(len(products))) - set(np.unique(y_train)))
+    if missing_classes:
+        missing_products = [products[class_idx] for class_idx in missing_classes]
+        raise ValueError(
+            "El corte de entrenamiento no contiene adquisiciones para "
+            f"estas clases multiclase: {missing_products}")
+    x_eval, y_eval, eval_weights, _ = expand_product_targets(
+        evaluation, products, label_cols, cols, categories)
     model = lgb.LGBMClassifier(**lgbm_params(config))
-    if early_stopping and eligible_eval[label].nunique() == 2:
-        model.fit(
-            x_train, y_train,
-            eval_set=[(x_eval, eligible_eval[label].astype("int8"))],
-            eval_metric="binary_logloss",
-            categorical_feature=list(categories) or "auto",
-            callbacks=[lgb.early_stopping(40, verbose=False),
-                       lgb.log_evaluation(period=0)],
-        )
-    else:
-        model.fit(x_train, y_train,
-                  categorical_feature=list(categories) or "auto")
-    best_iteration = int(model.best_iteration_ or model.n_estimators_)
-    return model, categories, best_iteration
+    fit_kwargs = {
+        "sample_weight": weights,
+        "categorical_feature": list(categories) or "auto",
+    }
+    if early_stopping:
+        fit_kwargs.update({
+            "eval_set": [(x_eval, y_eval)],
+            "eval_sample_weight": [eval_weights],
+            "eval_metric": "multi_logloss",
+            "callbacks": [lgb.early_stopping(60, verbose=False),
+                          lgb.log_evaluation(period=0)],
+        })
+    model.fit(x_train, y_train, **fit_kwargs)
+    return model, categories, int(model.best_iteration_ or model.n_estimators_)
 
 
 def segment_metrics(frame, rows: pd.DataFrame) -> pd.DataFrame:
@@ -481,102 +462,45 @@ def run() -> None:
     baseline_valid_rows = per_row_metrics(valid, valid_pop, products, labels)
     baseline_test_rows = per_row_metrics(test, test_pop, products, labels)
 
-    # Select hyperparameters from validation only. Tune on the three most
-    # prevalent products to bound runtime, then apply that setting to all labels.
-    prevalence = {}
-    for product in products:
-        eligible = train[product].fillna(0).eq(0)
-        prevalence[product] = float(train.loc[
-            eligible, f"{LABEL_PREFIX}{product}"
-        ].mean()) if eligible.any() else 0.0
-    tune_products = sorted(
-        products, key=lambda p: prevalence[p], reverse=True)[:3]
+    # Select parameters and iteration count by validation MAP@7 only.
     tuning_rows = []
-    best_config = {}
-    if args.model_family == "lightgbm":
-        for config in PARAMETER_GRID:
-            aps = []
-            for product in tune_products:
-                model, categories, _ = fit_lgbm_product(
-                    train, valid, product, cols, config, early_stopping=True
-                )
-                if model is None:
-                    continue
-                eligible = valid.loc[valid[product].fillna(0).eq(0)]
-                if eligible[f"{LABEL_PREFIX}{product}"].nunique() < 2:
-                    continue
-                prediction = score_product(
-                    model, valid, cols, categories, product)
-                aps.append(average_precision_score(
-                    valid.loc[eligible.index,
-                              f"{LABEL_PREFIX}{product}"].astype("int8"),
-                    prediction.loc[eligible.index],
-                ))
-            tuning_rows.append({**config, "mean_validation_average_precision":
-                                float(np.mean(aps)) if aps else float("nan")})
-        best_row = max(tuning_rows,
-                       key=lambda row: row["mean_validation_average_precision"])
-        best_config = {key: best_row[key] for key in PARAMETER_GRID[0]}
-        LOG.info("Mejor configuración LightGBM (solo validación): %s", best_config)
+    for config in PARAMETER_GRID:
+        tuning_model, tuning_categories, best_iteration = fit_lgbm_multiclass(
+            train, valid, products, labels, cols, config, early_stopping=True)
+        tuning_scores = score_multiclass(
+            tuning_model, valid, cols, products, tuning_categories)
+        tuning_rows.append({**config, "best_iteration": best_iteration,
+                            "validation_MAP_at_7": map_at_7(
+                                valid, tuning_scores, products, labels)})
+        del tuning_model
+    best_row = max(tuning_rows, key=lambda row: row["validation_MAP_at_7"])
+    best_config = {key: best_row[key] for key in PARAMETER_GRID[0]}
+    selected_iterations = int(best_row["best_iteration"])
+    LOG.info("Selected LightGBM parameters by validation MAP@7: %s; iterations=%s",
+             best_config, selected_iterations)
     pd.DataFrame(tuning_rows).to_csv(
         output / "hyperparameter_search.csv", index=False)
 
-    # Fit the user-selected family per product. Family selection comes from the
-    # sample notebook's validation comparison; test is never used to select it.
+    # Fit one multiclass model and score each eligible product for ranking.
     valid_scores = pd.DataFrame(0.0, index=valid.index, columns=products,
                                 dtype="float32")
     test_scores = pd.DataFrame(0.0, index=test.index, columns=products,
                                dtype="float32")
-    selected_models: dict[str, Any] = {}
-    categories_by_product: dict[str, dict[str, list[Any]]] = {}
-    best_iterations: dict[str, int] = {}
-    importances = []
+    model, categories, _ = fit_lgbm_multiclass(
+        train, valid, products, labels, cols,
+        {**best_config, "n_estimators": selected_iterations},
+        early_stopping=False)
+    valid_scores = score_multiclass(model, valid, cols, products, categories)
+    test_scores = score_multiclass(model, test, cols, products, categories)
     train_diagnostic = train.sample(
         n=min(20_000, len(train)), random_state=RANDOM_STATE)
-    train_scores = pd.DataFrame(0.0, index=train_diagnostic.index, columns=products,
-                                dtype="float32")
-
-    for number, product in enumerate(products, start=1):
-        model, categories, best_iteration = fit_product(
-            args.model_family, train, valid, product, cols, best_config
-        )
-        if model is None:
-            LOG.warning("%s omitido: faltan clases o filas elegibles", product)
-            continue
-        selected_models[product] = model
-        categories_by_product[product] = categories
-        best_iterations[product] = best_iteration
-        valid_scores[product] = score_product(
-            model, valid, cols, categories, product)
-        test_scores[product] = score_product(
-            model, test, cols, categories, product)
-        train_scores[product] = score_product(
-            model, train_diagnostic, cols, categories, product)
-        if args.model_family == "lightgbm":
-            importance_features = cols
-            importance_values = model.booster_.feature_importance("gain")
-        elif args.model_family == "random_forest":
-            importance_features = model.named_steps["preprocessor"].get_feature_names_out(
-            )
-            importance_values = model.named_steps["model"].feature_importances_
-        else:
-            importance_features = model.named_steps["preprocessor"].get_feature_names_out(
-            )
-            importance_values = np.abs(model.named_steps["model"].coef_[0])
-        importances.extend({
-            "producto": product,
-            "feature": str(feature),
-            "importance": float(gain),
-        } for feature, gain in zip(importance_features, importance_values))
-        LOG.info("Modelo %s/%s %s: iteración=%s", number, len(products),
-                 product, best_iteration)
-
-    if len(selected_models) != len(products):
-        raise RuntimeError(
-            f"Se entrenaron {len(selected_models)} de 24 modelos")
-
-    # Baseline comparison on validation; the selected family was chosen in the
-    # notebook and is recorded here for the complete data run.
+    train_scores = score_multiclass(
+        model, train_diagnostic, cols, products, categories)
+    importance_values = model.booster_.feature_importance("gain")
+    importances = [{"producto": "multiclass", "feature": str(feature),
+                    "importance": float(gain)}
+                   for feature, gain in zip(cols, importance_values)]
+    # Compare the selected multiclass model with popularity on validation.
     valid_model_rows = per_row_metrics(valid, valid_scores, products, labels)
     family_validation = pd.DataFrame([
         {"modelo": "popularidad", "MAP@7": baseline_valid_rows.average_precision_at_7.mean(),
@@ -607,26 +531,6 @@ def run() -> None:
             train_rows.average_precision_at_7.mean()
             - valid_model_rows.average_precision_at_7.mean()
         ),
-        "mean_train_logloss": float(np.mean([
-            log_loss(
-                train_diagnostic.loc[train_diagnostic[p].fillna(
-                    0).eq(0), f"{LABEL_PREFIX}{p}"].astype("int8"),
-                np.clip(train_scores.loc[train_diagnostic[p].fillna(
-                    0).eq(0), p], 1e-7, 1 - 1e-7),
-                labels=[0, 1],
-            ) for p in products
-            if train_diagnostic.loc[train_diagnostic[p].fillna(0).eq(0), f"{LABEL_PREFIX}{p}"].nunique() == 2
-        ])),
-        "mean_validation_logloss": float(np.mean([
-            log_loss(
-                valid.loc[valid[p].fillna(0).eq(
-                    0), f"{LABEL_PREFIX}{p}"].astype("int8"),
-                np.clip(valid_scores.loc[valid[p].fillna(
-                    0).eq(0), p], 1e-7, 1 - 1e-7),
-                labels=[0, 1],
-            ) for p in products
-            if valid.loc[valid[p].fillna(0).eq(0), f"{LABEL_PREFIX}{p}"].nunique() == 2
-        ])),
     }
 
     segments = segment_metrics(test, test_model_rows)
@@ -667,8 +571,8 @@ def run() -> None:
 
     # Concrete cases from the held-out test month; these demonstrate how the
     # ranking behaves, including successes and misses.
-    # Release validation models before fitting the final production models.
-    del selected_models
+    # Release the validation model before fitting the final production model.
+    del model
     case_indices = test_model_rows.sort_values(
         ["hit_at_7", "average_precision_at_7"], ascending=False
     ).head(10).index
@@ -685,38 +589,23 @@ def run() -> None:
                  if c in case_frame.columns]
     case_frame[case_cols].to_csv(output / "test_case_studies.csv", index=False)
 
-    # Refit final production models using all labeled data through validation.
-    # The test month remains excluded from this final artifact.
-    final_models: dict[str, Any] = {}
-    final_categories: dict[str, dict[str, list[Any]]] = {}
+    # Refit one production model on all labeled data before the test month.
+    final_x, final_y, final_weights, final_categories = expand_product_targets(
+        final_train, products, labels, cols)
+    inference_x, _ = prepare_xy(inference, cols, final_categories)
+    final_model = lgb.LGBMClassifier(
+        **lgbm_params({**best_config, "n_estimators": selected_iterations}))
+    final_model.fit(
+        final_x, final_y, sample_weight=final_weights,
+        categorical_feature=list(final_categories) or "auto")
+    inference_probabilities = final_model.predict_proba(inference_x).astype("float32")
     inference_scores = pd.DataFrame(0.0, index=inference.index, columns=products,
                                     dtype="float32")
-    for product in products:
-        label = f"{LABEL_PREFIX}{product}"
-        eligible = final_train.loc[final_train[product].fillna(0).eq(0)]
-        y = eligible[label].astype("int8")
-        pred = inference.loc[inference[product].fillna(0).eq(0)]
-        if y.nunique() < 2 or pred.empty:
-            raise RuntimeError(f"No es posible ajustar/inferir para {product}")
-        if args.model_family == "lightgbm":
-            x_train, categories = prepare_xy(eligible, cols)
-            x_pred, _ = prepare_xy(pred, cols, categories)
-            final_model = lgb.LGBMClassifier(
-                **lgbm_params(best_config, best_iterations[product])
-            )
-            final_model.fit(x_train, y,
-                            categorical_feature=list(categories) or "auto")
-        else:
-            categories = None
-            x_train = make_sklearn_pipeline(args.model_family, eligible, cols)
-            x_train.fit(eligible[cols], y)
-            final_model = x_train
-            x_pred = pred[cols]
-        final_models[product] = final_model
-        final_categories[product] = categories
-        inference_scores.loc[pred.index, product] = final_model.predict_proba(x_pred)[
-            :, 1].astype("float32")
-
+    for output_col, class_idx in enumerate(final_model.classes_):
+        if 0 <= int(class_idx) < len(products):
+            inference_scores.iloc[:, int(class_idx)] = inference_probabilities[:, output_col]
+    inference_held = inference[products].fillna(0).to_numpy(dtype=np.float32) == 1
+    inference_scores.values[inference_held] = 0.0
     example_idx = inference.index[0]
     example = inference.loc[example_idx]
     held = {p for p in products if pd.notna(example[p]) and example[p] == 1}
@@ -733,13 +622,15 @@ def run() -> None:
         "model_name": "finsir_product_recommendation",
         "model_family": args.model_family,
         "model_version": model_version,
-        "model_family": args.model_family,
-        "models": final_models,
+        "model": final_model,
         "categorical_categories": final_categories,
         "feature_cols": cols,
         "products": products,
+        "class_to_product": {int(class_idx): products[int(class_idx)]
+                             for class_idx in final_model.classes_},
         "k": K,
         "selected_hyperparameters": best_config,
+        "selected_iterations": selected_iterations,
         "training_max_feature_month": str(final_train.fecha_dato.max().date()),
         "label_definition": "product acquired in the following month",
         "test_map_at_7": float(test_model_rows.average_precision_at_7.mean()),
@@ -762,9 +653,10 @@ def run() -> None:
         "temporal_cuts": cuts,
         "feature_count": len(cols),
         "products": products,
-        "hyperparameter_tuning": {"products": tune_products if args.model_family == "lightgbm" else [],
+        "hyperparameter_tuning": {"scope": "all 24 products jointly",
                                   "grid": tuning_rows,
-                                  "selected": best_config},
+                                  "selected": best_config,
+                                  "selected_iterations": selected_iterations},
         "validation_comparison": family_validation.to_dict(orient="records"),
         "test_metrics": final_test.to_dict(orient="records"),
         "bias_variance_diagnosis": diagnosis,
