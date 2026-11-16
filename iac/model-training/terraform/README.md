@@ -1,6 +1,6 @@
 # Terraform para entrenamiento FINSIR en EC2
 
-Este modulo crea un rol IAM, permisos acotados al prefijo `gold/train/` del bucket y al prefijo `models/`, una instancia EC2 Amazon Linux 2023 opcional y acceso administrativo mediante Systems Manager Session Manager. No abre SSH. El ID de cuenta se obtiene de las credenciales AWS activas; si `bucket_name` queda vacio, el bucket se calcula como `finsir-<id-de-cuenta>`. Puedes indicar otro bucket existente en `terraform.tfvars`.
+Este modulo crea un rol IAM, permisos acotados al prefijo `gold/train/` del bucket y al prefijo `models/`, una instancia EC2 Amazon Linux 2023 opcional y acceso administrativo mediante Systems Manager Session Manager. El grupo de seguridad no abre puertos entrantes; permite salida TCP 80 para el repositorio predeterminado de extensiones DuckDB y TCP 443 para SSM, S3, GitHub y paquetes. El ID de cuenta se obtiene de las credenciales AWS activas; si `bucket_name` queda vacio, el bucket se calcula como `finsir-<id-de-cuenta>`. Puedes indicar otro bucket existente en `terraform.tfvars`.
 
 ## Requisitos
 
