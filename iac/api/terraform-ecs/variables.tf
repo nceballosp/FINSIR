@@ -68,6 +68,12 @@ variable "athena_table" {
   default     = "gold_train"
 }
 
+variable "model_s3_uri" {
+  description = "Optional S3 URI of the joblib model artifact. Leave empty to deploy data-only API routes."
+  type        = string
+  default     = ""
+}
+
 # --- Fargate sizing ---------------------------------------------------------
 
 variable "service_port" {

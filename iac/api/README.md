@@ -85,6 +85,87 @@ curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/product-kpis/months/2016-0
 curl -H "Authorization: Bearer $TOKEN" "$BASE/v1/gold/product-affinity/months/2016-05-28?product_a=ind_cno_fin_ult1"
 ```
 
+## Inferencia del modelo
+
+La API también puede servir el modelo multiclase producido por
+`iac/model-training/train.py`:
+
+- `GET /v1/recommendations/clients/{ncodpers}` consulta las filas Gold del
+  cliente y recomienda sobre la más reciente.
+- `POST /v1/recommendations/batch` puntúa hasta 100 filas de features Gold ya
+  preprocesadas. Cada fila debe incluir todas las columnas de `feature_cols` del
+  artefacto.
+
+Ambas rutas requieren bearer token. Excluyen productos que el cliente ya tiene
+y devuelven los siete scores más altos. Los scores son valores de ranking del
+modelo multiclase, no probabilidades independientes de compra.
+
+La tarea ECS descarga el joblib desde `MODEL_S3_URI` al iniciar y conserva el
+modelo en memoria. Deja esa variable vacía para desplegar solo la API de datos;
+en ese caso, las rutas de recomendaciones responden `503 model_unavailable`.
+El artefacto debe existir antes del despliegue y estar en el mismo bucket de
+datos de Athena que usa ECS.
+El script interactivo recibe el URI al desplegar y fuerza una nueva task ECS,
+también cuando se reemplaza el contenido del mismo objeto S3.
+
+```bash
+BASE="http://<task-ip>:8080"
+TOKEN="<bearer-jwt>"
+
+# Utiliza la fila Gold más reciente del cliente.
+curl -H "Authorization: Bearer $TOKEN" \
+  "$BASE/v1/recommendations/clients/1375586"
+
+# batch-gold.json contiene filas completas generadas por gold_train.py.
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @batch-gold.json \
+  "$BASE/v1/recommendations/batch"
+```
+
+`test_ver2.csv` es el CSV crudo de Kaggle y no contiene las features históricas
+(`lag1`, `lag3`, `lag6`, productos añadidos y conteos) que consume el modelo.
+Para inferir sobre ese archivo, primero genera Silver/Gold mediante los jobs de
+Glue usando también el Silver histórico; luego envía una muestra de esas filas
+Gold al endpoint batch. Como `test_ver2.csv` no tiene adquisiciones del mes
+siguiente, sirve para obtener recomendaciones, pero no para calcular MAP@7.
+La métrica de calidad se mide con el test temporal etiquetado que produce el
+entrenamiento.
+
+Preparación resumida de ese CSV para el endpoint:
+
+1. Copia `raw/train/` a un prefijo temporal, por ejemplo
+   `raw/test_ver2_source/`, y agrega allí `test_ver2.csv`.
+2. Ejecuta `finsir-limpieza-train` con `--RAW raw/test_ver2_source/` y
+   `--SILVER silver/test_ver2_source/` (usa también prefijos propios para
+   `--RECHAZADOS` y `--CALIDAD`). Así la limpieza puede usar el historial del
+   mismo cliente para rescatar los campos permitidos.
+3. Ejecuta `finsir-gold-train` con `--SILVER silver/test_ver2_source/` y
+   `--GOLD gold/test_ver2/`.
+5. Lee unas filas del Parquet en `gold/test_ver2/` y envíalas en lotes de hasta
+   100 al endpoint `POST /v1/recommendations/batch`.
+
+Para enviar una muestra desde tu máquina, instala las dependencias del
+entrenamiento (`duckdb`, `pandas`) y define un token válido:
+
+```bash
+export FINSIR_API_TOKEN="<bearer-jwt>"
+python iac/api/scripts/invoke_recommendations.py \
+  --gold-s3-uri "s3://<bucket>/gold/test_ver2/" \
+  --fecha-dato "<mes-de-test>" --limit 10 \
+  --api-url "http://<task-ip>:8080" --aws-profile terraform
+```
+
+En PowerShell, define `$env:FINSIR_API_TOKEN` y ejecuta el mismo script con
+`python`. Omite `--aws-profile` si lo ejecutas en EC2 con el rol de instancia.
+El cliente lee hasta `--limit` filas del Parquet, y hace peticiones de máximo
+100 registros cada una.
+
+El paso de combinar Silver es necesario para calcular lags históricos del
+cliente. No sobrescribas `raw/train/`, `silver/train/` ni `gold/train/` durante
+esta prueba. Las adquisiciones futuras no vienen en `test_ver2.csv`, por lo que
+la salida permite inspeccionar rankings, no calcular MAP@7.
+
 ## Auth
 
 Toda ruta `/v1` necesita un JWT bearer (`/health` es abierta). Nada está escrito
@@ -105,6 +186,7 @@ Token ausente/inválido → 401; scope equivocado → 403. El token nunca se log
 | `ATHENA_WORKGROUP`                                         | sí          | Workgroup de Athena                                |
 | `ATHENA_OUTPUT`                                            | sí          | URI de S3 para resultados de Athena                |
 | `ATHENA_TABLE`                                             | no          | Tabla gold (default `gold_train`)                  |
+| `MODEL_S3_URI`                                             | no          | Artefacto joblib multiclase en S3 para recomendaciones |
 | `ATHENA_ANALYTICS_TABLE_PREFIX`                            | no          | Prefijo de las tablas analíticas (default `gold_`) |
 | `AWS_REGION`                                               | no          | Región (default `us-east-1`)                       |
 | `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod        | Validación de tokens RS256                         |

@@ -15,9 +15,15 @@ from app.adapters.driving.http.auth import JwtValidator
 from app.adapters.driving.http.correlation import CorrelationIdMiddleware
 from app.adapters.driving.http.exception_handler import register_exception_handlers
 from app.adapters.driving.http.logging_config import configure_logging
-from app.adapters.driving.http.routers import gold_analytics, gold_train, health
+from app.adapters.driving.http.routers import (
+    gold_analytics,
+    gold_train,
+    health,
+    recommendations,
+)
 from app.config import Settings
 from app.container import Container, build_container
+from app.services.product_recommender import ProductRecommender
 
 
 def create_app(
@@ -38,6 +44,13 @@ def create_app(
     resolved_container = (
         container if container is not None else build_container(resolved_settings)
     )
+    product_recommender = (
+        ProductRecommender.from_s3(
+            resolved_settings.model_s3_uri, resolved_settings.aws_region
+        )
+        if resolved_settings.model_s3_uri
+        else None
+    )
 
     logger = configure_logging(
         resolved_settings.service_name,
@@ -51,6 +64,7 @@ def create_app(
     )
     app.state.settings = resolved_settings
     app.state.container = resolved_container
+    app.state.product_recommender = product_recommender
     app.state.jwt_validator = JwtValidator(resolved_settings)
 
     app.add_middleware(CorrelationIdMiddleware)
@@ -58,6 +72,7 @@ def create_app(
 
     app.include_router(health.router)
     app.include_router(gold_train.router)
+    app.include_router(recommendations.router)
     for analytics_router in gold_analytics.build_analytics_routers():
         app.include_router(analytics_router)
     return app

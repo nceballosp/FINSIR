@@ -54,9 +54,23 @@ $AuthScope  = Ask "Required auth scope" "gold:read"
 $AthenaDb   = Ask "Athena database" $Project
 $AthenaWg   = Ask "Athena workgroup" $Project
 $AthenaTbl  = Ask "Athena table" "gold_train"
+$ModelS3Uri = Ask "Model artifact S3 URI (blank disables recommendation endpoints)" ""
 $ServiceEnv = Ask "Service environment (local|dev|uat|prod)" "dev"
 
-if ((AskYesNo "Build and push the Docker image to ECR now?" "n") -eq "true") {
+if (-not [string]::IsNullOrWhiteSpace($ModelS3Uri)) {
+  if ($ModelS3Uri -notmatch '^s3://(?<bucket>[^/]+)/(?<key>.+)$') {
+    throw "Model URI must use s3://bucket/key."
+  }
+  aws s3api head-object --bucket $Matches.bucket --key $Matches.key --region $Region | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Model artifact was not found or is not readable: $ModelS3Uri" }
+}
+
+$BuildDefault = if ([string]::IsNullOrWhiteSpace($ModelS3Uri)) { "n" } else { "y" }
+$BuildImage = AskYesNo "Build and push the Docker image to ECR now?" $BuildDefault
+if (-not [string]::IsNullOrWhiteSpace($ModelS3Uri) -and $BuildImage -ne "true") {
+  throw "The recommendation routes require the updated API image. Choose Yes to build and push it."
+}
+if ($BuildImage -eq "true") {
   # AWS CLI writes "repository not found" to stderr and exits non-zero. With
   # $ErrorActionPreference=Stop, PowerShell 7 can promote that stderr output
   # to a terminating NativeCommandError before we inspect $LASTEXITCODE.
@@ -87,6 +101,7 @@ image_tag           = "$ImageTag"
 athena_database     = "$AthenaDb"
 athena_workgroup    = "$AthenaWg"
 athena_table        = "$AthenaTbl"
+model_s3_uri        = "$ModelS3Uri"
 auth_required_scope = "$AuthScope"
 service_environment = "$ServiceEnv"
 "@ | Set-Content -Encoding ascii (Join-Path $TfDir "terraform.tfvars")
@@ -102,6 +117,8 @@ try { terraform apply } finally { Remove-Item Env:\TF_VAR_auth_dev_secret -Error
 Write-Host "Resolving the public IP (waiting for the Fargate task to start)..."
 $Cluster = (terraform output -raw cluster_name).Trim()
 $Service = (terraform output -raw service_name).Trim()
+aws ecs update-service --cluster $Cluster --service $Service --force-new-deployment --region $Region | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Could not restart ECS service '$Service'." }
 $PublicIp = ""
 for ($i = 0; $i -lt 30; $i++) {
   $task = (aws ecs list-tasks --cluster $Cluster --service-name $Service --desired-status RUNNING --region $Region --query 'taskArns[0]' --output text 2>$null)

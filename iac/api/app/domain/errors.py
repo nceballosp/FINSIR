@@ -38,3 +38,11 @@ class RepositoryError(DomainError):
     Wraps infrastructure failures (botocore ``ClientError``, failed Athena
     query executions) so the domain and use cases never see boto3 types.
     """
+
+
+class ModelUnavailableError(DomainError):
+    """Raised when model inference is not configured for this API deployment."""
+
+
+class InvalidModelInputError(DomainError):
+    """Raised when an inference record lacks a required model feature."""

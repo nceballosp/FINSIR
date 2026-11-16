@@ -19,6 +19,8 @@ from app.adapters.driving.http.schemas import ErrorBody, ErrorResponse
 from app.domain.errors import (
     ClientNotFoundError,
     InvalidQueryError,
+    InvalidModelInputError,
+    ModelUnavailableError,
     RepositoryError,
 )
 
@@ -71,6 +73,16 @@ def register_exception_handlers(app: FastAPI, logger: logging.Logger) -> None:
         return _error_response(
             _HTTP_INTERNAL_ERROR, "internal_error", "Internal server error"
         )
+
+    @app.exception_handler(ModelUnavailableError)
+    async def _handle_model_unavailable(_: Request, __: ModelUnavailableError):
+        return _error_response(
+            503, "model_unavailable", "Model inference is not configured"
+        )
+
+    @app.exception_handler(InvalidModelInputError)
+    async def _handle_model_input(_: Request, error: InvalidModelInputError):
+        return _error_response(422, "invalid_model_input", str(error))
 
     @app.exception_handler(Exception)
     async def _handle_unexpected(_: Request, error: Exception):
