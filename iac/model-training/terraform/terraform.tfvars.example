@@ -1,0 +1,11 @@
+region               = "us-east-1"
+# Vacio deriva finsir-<id de la cuenta AWS autenticada>.
+bucket_name          = ""
+gold_prefix          = "gold/train/"
+model_prefix         = "models/"
+create_instance      = false
+instance_type        = "r7i.4xlarge"
+root_volume_size_gib = 300
+
+# Si no tienes una VPC predeterminada, indica una subred publica de tu VPC.
+# subnet_id = "subnet-0123456789abcdef0"
