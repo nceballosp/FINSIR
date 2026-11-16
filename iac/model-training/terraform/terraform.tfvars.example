@@ -3,9 +3,17 @@ region               = "us-east-1"
 bucket_name          = ""
 gold_prefix          = "gold/train/"
 model_prefix         = "models/"
-create_instance      = false
+create_instance      = true
 instance_type        = "r7i.4xlarge"
 root_volume_size_gib = 300
+training_repo_url    = "https://github.com/nceballosp/FINSIR.git"
+training_repo_branch = "modelo"
+training_repo_path   = "/opt/finsir-model-training/FINSIR"
+
+# Opcional: horario independiente para volver a entrenar. Dejalo apagado si
+# prefieres iniciar el entrenamiento manualmente desde Step Functions.
+training_schedule_enabled    = false
+training_schedule_expression = "cron(0 8 1 * ? *)"
 
 # Si no tienes una VPC predeterminada, indica una subred publica de tu VPC.
 # subnet_id = "subnet-0123456789abcdef0"

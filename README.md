@@ -107,6 +107,28 @@ plataforma). Te pregunta si borrar el data lake de S3 y la imagen de ECR.
 Al terminar nada queda corriendo ni facturando (solo los datos de S3 que
 decidas conservar cuestan unos centavos).
 
+## Entrenar el modelo en EC2
+
+El entrenamiento tiene una Step Function propia. Primero ejecuta el batch de datos y confirma que `gold/train/` esté
+actualizado. Luego despliega el módulo de entrenamiento:
+
+```powershell
+cd iac/model-training/terraform
+Copy-Item terraform.tfvars.example terraform.tfvars
+# Ajusta bucket_name si el bucket no es finsir-<id de la cuenta AWS activa>.
+terraform init
+terraform plan -out tfplan
+terraform apply tfplan
+```
+
+En AWS, abre **Step Functions → State machines → `finsir-model-training` →
+Start execution** y usa `{}` como entrada. La máquina inicia la EC2, prepara el
+repositorio y sus dependencias, entrena con los datos Gold y detiene la EC2 al
+terminar. El artefacto se guarda en
+`s3://<bucket>/models/production/finsir.joblib`. Consulta
+[`iac/model-training/terraform/README.md`](iac/model-training/terraform/README.md)
+para configurar el repositorio o un horario opcional.
+
 ## Correr la API local (sin desplegar en AWS)
 
 El modo dev valida tokens HS256 sin ningún secreto versionado. Las rutas de

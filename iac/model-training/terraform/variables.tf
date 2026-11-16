@@ -46,6 +46,36 @@ variable "subnet_id" {
   default     = ""
 }
 
+variable "training_repo_url" {
+  description = "Repositorio Git que contiene iac/model-training/train.py."
+  type        = string
+  default     = "https://github.com/nceballosp/FINSIR.git"
+}
+
+variable "training_repo_branch" {
+  description = "Rama del repositorio que contiene el codigo de entrenamiento."
+  type        = string
+  default     = "modelo"
+}
+
+variable "training_repo_path" {
+  description = "Ruta del checkout del repositorio en la EC2."
+  type        = string
+  default     = "/opt/finsir-model-training/FINSIR"
+}
+
+variable "training_schedule_enabled" {
+  description = "Activa un horario opcional para entrenar periodicamente. Apagado por defecto."
+  type        = bool
+  default     = false
+}
+
+variable "training_schedule_expression" {
+  description = "Horario UTC de EventBridge para iniciar el entrenamiento, por ejemplo cron(0 8 1 * ? *)."
+  type        = string
+  default     = "cron(0 8 1 * ? *)"
+}
+
 variable "tags" {
   description = "Etiquetas adicionales para los recursos."
   type        = map(string)
