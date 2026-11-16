@@ -118,6 +118,8 @@ def read_gold(args: argparse.Namespace) -> pd.DataFrame:
     con.execute(
         f"SET memory_limit = '{quote_sql_string(args.duckdb_memory_limit)}'")
     con.execute(f"SET temp_directory = '{quote_sql_string(str(temp_dir))}'")
+    con.execute(
+        "SET custom_extension_repository = 'https://extensions.duckdb.org'")
     con.execute("INSTALL aws; LOAD aws; INSTALL httpfs; LOAD httpfs")
 
     region = quote_sql_string(args.region)
