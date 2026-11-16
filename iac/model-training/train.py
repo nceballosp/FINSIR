@@ -202,9 +202,9 @@ def temporal_split(frame: pd.DataFrame, label_cols: list[str]):
         raise AssertionError("Los cortes temporales no están ordenados")
     return train, valid, test, inference, final_train, {
         "train_max_feature_month": str(train.fecha_dato.max().date()),
-        "validation_month": str(valid_month.astype("datetime64[D]")),
-        "test_month": str(test_month.astype("datetime64[D]")),
-        "inference_month": str(inference_month.astype("datetime64[D]")),
+        "validation_month": str(pd.Timestamp(valid_month).date()),
+        "test_month": str(pd.Timestamp(test_month).date()),
+        "inference_month": str(pd.Timestamp(inference_month).date()),
         "inference_target_month": "month following inference_month",
     }
 
