@@ -117,7 +117,15 @@ resource "aws_security_group" "training" {
   vpc_id      = data.aws_subnet.selected[0].vpc_id
 
   egress {
-    description = "HTTPS para SSM, S3 y descarga de paquetes."
+    description = "HTTP para el repositorio predeterminado de extensiones DuckDB."
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "HTTPS para SSM, S3, GitHub y descarga segura de paquetes."
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"

@@ -395,7 +395,8 @@ def fit_lgbm_product(frame, evaluation, product, cols, config,
     if early_stopping and eligible_eval[label].nunique() == 2:
         model.fit(
             x_train, y_train,
-            eval_set=[(x_eval, eligible_eval[label].astype("int8"))],
+            eval_X=x_eval,
+            eval_y=eligible_eval[label].astype("int8"),
             eval_metric="binary_logloss",
             categorical_feature=list(categories) or "auto",
             callbacks=[lgb.early_stopping(40, verbose=False),
