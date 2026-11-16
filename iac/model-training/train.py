@@ -356,7 +356,9 @@ def score_multiclass(model, frame, cols, products, categories):
         if 0 <= int(class_idx) < len(products):
             scores.iloc[:, int(class_idx)] = probabilities[:, output_col]
     held = frame[products].fillna(0).to_numpy(dtype=np.float32) == 1
-    scores.values[held] = 0.0
+    score_values = scores.to_numpy(copy=True)
+    score_values[held] = 0.0
+    scores.loc[:, products] = score_values
     return scores
 
 
@@ -605,7 +607,9 @@ def run() -> None:
         if 0 <= int(class_idx) < len(products):
             inference_scores.iloc[:, int(class_idx)] = inference_probabilities[:, output_col]
     inference_held = inference[products].fillna(0).to_numpy(dtype=np.float32) == 1
-    inference_scores.values[inference_held] = 0.0
+    inference_values = inference_scores.to_numpy(copy=True)
+    inference_values[inference_held] = 0.0
+    inference_scores.loc[:, products] = inference_values
     example_idx = inference.index[0]
     example = inference.loc[example_idx]
     held = {p for p in products if pd.notna(example[p]) and example[p] == 1}
