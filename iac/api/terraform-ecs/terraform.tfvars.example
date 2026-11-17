@@ -10,6 +10,10 @@ athena_database  = "finsir"
 athena_workgroup = "finsir"
 athena_table     = "gold_train"
 
+# Optional model from iac/model-training/train.py. Keep it empty to deploy
+# only the data and analytics endpoints.
+# model_s3_uri = "s3://finsir-<account-id>/models/production/finsir.joblib"
+
 # Image already in ECR.
 ecr_repository_name = "finsir-api"
 image_tag           = "latest"

@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     athena_table: str = DEFAULT_GOLD_TABLE
     athena_analytics_table_prefix: str = DEFAULT_ANALYTICS_TABLE_PREFIX
     aws_region: str = DEFAULT_AWS_REGION
+    model_s3_uri: Optional[str] = None
 
     auth_issuer: Optional[str] = None
     auth_audience: Optional[str] = None

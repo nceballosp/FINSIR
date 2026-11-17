@@ -57,6 +57,7 @@ htmlcov/
 .env
 .env.*
 !.env.example
+.streamlit/secrets.toml
 
 # OS files
 .DS_Store

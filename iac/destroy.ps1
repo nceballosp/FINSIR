@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-  Interactive teardown for the FINSIR infra (API on ECS + data platform) on Windows.
+  Interactive teardown for the FINSIR infra (API, model training + data platform) on Windows.
 .DESCRIPTION
-  Destroys the API first (it reads the data platform), then the data platform.
+  Destroys the API, model training resources, then the data platform.
   Asks whether to delete the S3 data lake (emptied first, since terraform
   destroy refuses a non-empty bucket) and whether to delete the ECR image.
 #>
@@ -11,6 +11,7 @@ $ErrorActionPreference = "Stop"
 $IacDir = $PSScriptRoot
 $ApiTf  = Join-Path $IacDir "api\terraform-ecs"
 $DataTf = Join-Path $IacDir "data-platform\terraform"
+$ModelTf = Join-Path $IacDir "model-training\terraform"
 
 function Ask($prompt, $default) {
   if ($default) { $reply = Read-Host "$prompt [$default]"; if ([string]::IsNullOrWhiteSpace($reply)) { return $default } else { return $reply } }
@@ -56,6 +57,15 @@ if (Test-Path $ApiTf) {
   Write-Host "Skipping API: $ApiTf not found."
 }
 
+# --- 2) Model training (EC2 + Step Functions) -------------------------------
+if (Test-Path $ModelTf) {
+  Write-Host "-- Destroying model training (EC2 + Step Functions) --"
+  terraform -chdir="$ModelTf" init -input=false
+  terraform -chdir="$ModelTf" destroy -auto-approve
+} else {
+  Write-Host "Skipping model training: $ModelTf not found."
+}
+
 # ECR repo is not managed by Terraform, so delete the image/repo by hand.
 if ($DeleteImage -eq "true") {
   if ($ImageTag) {
@@ -67,7 +77,7 @@ if ($DeleteImage -eq "true") {
   }
 }
 
-# --- 2) Data platform (S3 + Glue + Athena) ---------------------------------
+# --- 3) Data platform (S3 + Glue + Athena) ---------------------------------
 if (Test-Path $DataTf) {
   Write-Host "-- Destroying the data platform --"
   terraform -chdir="$DataTf" init -input=false

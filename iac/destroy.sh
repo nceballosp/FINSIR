@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Interactive teardown for the FINSIR infra (API on ECS + data platform).
-# Destroys the API first (it reads the data platform), then the data platform.
+# Interactive teardown for the FINSIR infra (API, model training + data platform).
+# Destroys the API, model training, then the data platform.
 # Asks whether to delete the S3 data lake (emptied first, since terraform
 # destroy refuses a non-empty bucket) and whether to delete the ECR image.
 set -euo pipefail
@@ -8,6 +8,7 @@ set -euo pipefail
 IAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 API_TF="$IAC_DIR/api/terraform-ecs"
 DATA_TF="$IAC_DIR/data-platform/terraform"
+MODEL_TF="$IAC_DIR/model-training/terraform"
 
 ask() {
   local __var="$1" __prompt="$2" __default="${3:-}" __reply
@@ -62,6 +63,17 @@ else
   echo "Skipping API: $API_TF not found."
 fi
 
+# ---------------------------------------------------------------------------
+# 2) Model training (EC2 + Step Functions).
+# ---------------------------------------------------------------------------
+if [[ -d "$MODEL_TF" ]]; then
+  echo "-- Destroying model training (EC2 + Step Functions) --"
+  terraform -chdir="$MODEL_TF" init -input=false
+  terraform -chdir="$MODEL_TF" destroy -auto-approve
+else
+  echo "Skipping model training: $MODEL_TF not found."
+fi
+
 # ECR repo is not managed by Terraform, so delete the image/repo by hand.
 if [[ "$DELETE_IMAGE" == "true" ]]; then
   if [[ -n "$IMAGE_TAG" ]]; then
@@ -76,7 +88,7 @@ if [[ "$DELETE_IMAGE" == "true" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 2) Data platform (S3 + Glue + Athena).
+# 3) Data platform (S3 + Glue + Athena).
 # ---------------------------------------------------------------------------
 if [[ -d "$DATA_TF" ]]; then
   echo "-- Destroying the data platform --"

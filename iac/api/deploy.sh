@@ -61,11 +61,31 @@ ask AUTH_SCOPE  "Required auth scope" "gold:read"
 ask ATHENA_DB   "Athena database"     "$PROJECT"
 ask ATHENA_WG   "Athena workgroup"    "$PROJECT"
 ask ATHENA_TBL  "Athena table"        "gold_train"
+ask MODEL_S3_URI "Model artifact S3 URI (blank disables recommendation endpoints)" ""
 ask SERVICE_ENV "Service environment (local|dev|uat|prod)" "dev"
 
+if [[ -n "$MODEL_S3_URI" ]]; then
+  if [[ ! "$MODEL_S3_URI" =~ ^s3://([^/]+)/(.+)$ ]]; then
+    echo "Model URI must use s3://bucket/key." >&2
+    exit 1
+  fi
+  aws s3api head-object --bucket "${BASH_REMATCH[1]}" \
+    --key "${BASH_REMATCH[2]}" --region "$REGION" >/dev/null
+fi
+
 # Optional: build and push the image to ECR before applying.
-ask_yes_no DO_BUILD "Build and push the Docker image to ECR now?" "n"
+BUILD_DEFAULT="n"
+[[ -n "$MODEL_S3_URI" ]] && BUILD_DEFAULT="y"
+ask_yes_no DO_BUILD "Build and push the Docker image to ECR now?" "$BUILD_DEFAULT"
+if [[ -n "$MODEL_S3_URI" && "$DO_BUILD" != "true" ]]; then
+  echo "The recommendation routes require the updated API image. Choose Yes to build and push it." >&2
+  exit 1
+fi
 if [[ "$DO_BUILD" == "true" ]]; then
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker Desktop is not running or its Linux container engine is unavailable. Start Docker Desktop, wait for the engine, and rerun this script." >&2
+    exit 1
+  fi
   if ! aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$REGION" >/dev/null 2>&1; then
     echo "Creating ECR repository $ECR_REPO..."
     aws ecr create-repository --repository-name "$ECR_REPO" --region "$REGION" >/dev/null
@@ -84,6 +104,7 @@ image_tag           = "${IMAGE_TAG}"
 athena_database     = "${ATHENA_DB}"
 athena_workgroup    = "${ATHENA_WG}"
 athena_table        = "${ATHENA_TBL}"
+model_s3_uri        = "${MODEL_S3_URI}"
 auth_required_scope = "${AUTH_SCOPE}"
 service_environment = "${SERVICE_ENV}"
 EOF
@@ -99,6 +120,8 @@ TF_VAR_auth_dev_secret="$AUTH_DEV_SECRET" terraform apply
 echo "Resolving the public IP (waiting for the Fargate task to start)..."
 CLUSTER="$(terraform output -raw cluster_name)"
 SERVICE="$(terraform output -raw service_name)"
+aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+  --force-new-deployment --region "$REGION" >/dev/null
 PUBLIC_IP=""
 for _ in $(seq 1 30); do
   TASK="$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
@@ -118,8 +141,8 @@ done
 echo
 echo "================ FINSIR API deployed ================"
 if [[ -n "$PUBLIC_IP" && "$PUBLIC_IP" != "None" ]]; then
-  echo "Public URL : http://${PUBLIC_IP}:${SERVICE_PORT:-8080}"
-  echo "Health     : http://${PUBLIC_IP}:${SERVICE_PORT:-8080}/health"
+  echo "Public URL : http://${PUBLIC_IP}:8080"
+  echo "Health     : http://${PUBLIC_IP}:8080/health"
 else
   echo "Public URL : task not RUNNING yet; re-run the IP lookup in terraform-ecs/README.md shortly."
 fi

@@ -175,6 +175,7 @@ resource "aws_ecs_task_definition" "api" {
         { name = "ATHENA_WORKGROUP", value = var.athena_workgroup },
         { name = "ATHENA_OUTPUT", value = local.athena_output },
         { name = "ATHENA_TABLE", value = var.athena_table },
+        { name = "MODEL_S3_URI", value = var.model_s3_uri },
         { name = "AWS_REGION", value = local.region },
         { name = "IS_AUTH_DEV_MODE", value = "true" },
         { name = "AUTH_DEV_SECRET", value = var.auth_dev_secret },

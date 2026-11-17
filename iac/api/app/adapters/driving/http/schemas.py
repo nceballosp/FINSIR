@@ -57,6 +57,36 @@ class GoldTablePageResponse(BaseModel):
     meta: PageMeta
 
 
+class RecommendationInput(BaseModel):
+    """One preprocessed Gold feature row for batch model inference."""
+
+    ncodpers: Optional[int] = None
+    fecha_dato: Optional[str] = None
+    features: dict[str, Any]
+
+
+class RecommendationBatchRequest(BaseModel):
+    """Small batch request; large files should be scored outside HTTP."""
+
+    records: list[RecommendationInput] = Field(min_length=1, max_length=100)
+
+
+class RecommendedProduct(BaseModel):
+    product: str
+    score: float
+
+
+class ClientRecommendations(BaseModel):
+    ncodpers: Optional[int] = None
+    fecha_dato: Optional[str] = None
+    recommendations: list[RecommendedProduct]
+
+
+class RecommendationBatchResponse(BaseModel):
+    model_version: str
+    items: list[ClientRecommendations]
+
+
 class ErrorBody(BaseModel):
     """The error detail inside the error envelope."""
 

@@ -12,6 +12,7 @@ from fastapi import Request
 from app.use_cases.get_client_records import GetClientRecords
 from app.use_cases.list_analytics_month import ListAnalyticsMonth
 from app.use_cases.list_month import ListMonth
+from app.services.product_recommender import ProductRecommender
 
 
 def get_client_records_use_case(request: Request) -> GetClientRecords:
@@ -27,3 +28,8 @@ def list_month_use_case(request: Request) -> ListMonth:
 def list_analytics_month_use_case(request: Request) -> ListAnalyticsMonth:
     """Return the wired :class:`ListAnalyticsMonth` use case."""
     return request.app.state.container.list_analytics_month
+
+
+def get_product_recommender(request: Request) -> ProductRecommender | None:
+    """Return the optional model loaded during application construction."""
+    return request.app.state.product_recommender
