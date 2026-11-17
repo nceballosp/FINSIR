@@ -166,7 +166,7 @@ resource "aws_instance" "training" {
     mkdir -p /opt/finsir-model-training /mnt/finsir-duckdb-tmp
     chmod 0777 /opt/finsir-model-training
     chmod 1777 /mnt/finsir-duckdb-tmp
-    shutdown -h now
+    # The Step Function owns the EC2 lifecycle; leave it running after bootstrap.
   USERDATA
 
   tags = { Name = "finsir-model-training" }
