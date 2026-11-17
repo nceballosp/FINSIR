@@ -9,7 +9,20 @@ locals {
     mkdir -p "$HOME/.duckdb/extensions" "$XDG_CACHE_HOME" /mnt/finsir-duckdb-tmp "$(dirname '${var.training_repo_path}')"
 
     if ! command -v git >/dev/null 2>&1 || ! command -v python3.12 >/dev/null 2>&1 || ! (ldconfig -p 2>/dev/null | grep -q 'libgomp.so.1'); then
-      dnf install -y git libgomp python3.12 python3.12-pip
+      # DNF can retain metadata for an RPM that has disappeared from its
+      # package cache. Clear it and retry transient repository/cache failures.
+      dnf clean all
+      attempt=1
+      until dnf install -y --refresh git libgomp python3.12 python3.12-pip; do
+        if [ "$attempt" -ge 3 ]; then
+          echo "Could not install system packages after $attempt attempts." >&2
+          exit 1
+        fi
+        echo "Package installation failed; clearing DNF cache and retrying ($attempt/3)..." >&2
+        dnf clean all
+        sleep 5
+        attempt=$((attempt + 1))
+      done
     fi
 
     REPO='${var.training_repo_path}'
@@ -60,6 +73,9 @@ locals {
         Parameters = {
           InstanceIds = [aws_instance.training[0].id]
         }
+        ResultSelector = {
+          "State.$" = "$.Reservations[0].Instances[0].State.Name"
+        }
         ResultPath = "$.ec2Info"
         Catch = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "EntrenamientoFallido" }]
         Next  = "EstadoEC2"
@@ -67,10 +83,10 @@ locals {
       EstadoEC2 = {
         Type = "Choice"
         Choices = [
-          { Variable = "$.ec2Info.Reservations[0].Instances[0].State.Name", StringEquals = "running", Next = "InicializarEsperaSSM" },
-          { Variable = "$.ec2Info.Reservations[0].Instances[0].State.Name", StringEquals = "stopped", Next = "IniciarEC2" },
-          { Variable = "$.ec2Info.Reservations[0].Instances[0].State.Name", StringEquals = "terminated", Next = "EntrenamientoFallido" },
-          { Variable = "$.ec2Info.Reservations[0].Instances[0].State.Name", StringEquals = "shutting-down", Next = "EntrenamientoFallido" },
+          { Variable = "$.ec2Info.State", StringEquals = "running", Next = "InicializarEsperaSSM" },
+          { Variable = "$.ec2Info.State", StringEquals = "stopped", Next = "IniciarEC2" },
+          { Variable = "$.ec2Info.State", StringEquals = "terminated", Next = "EntrenamientoFallido" },
+          { Variable = "$.ec2Info.State", StringEquals = "shutting-down", Next = "EntrenamientoFallido" },
         ]
         Default = "EsperarEC2"
       }
@@ -132,6 +148,9 @@ locals {
           # so AWS-RunShellScript receives valid Unix shell lines.
           Parameters = { commands = [replace(local.training_command, "\r", "")], executionTimeout = ["86400"] }
         }
+        ResultSelector = {
+          "CommandId.$" = "$.Command.CommandId"
+        }
         ResultPath = "$.trainingCommand"
         Retry = [{ ErrorEquals = ["Ssm.InternalServerError", "Ssm.ThrottlingException"], IntervalSeconds = 10, BackoffRate = 2, MaxAttempts = 3 }]
         Catch = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "DetenerEC2Fallida" }]
@@ -142,8 +161,13 @@ locals {
         Type     = "Task"
         Resource = "arn:aws:states:::aws-sdk:ssm:getCommandInvocation"
         Parameters = {
-          "CommandId.$" = "$.trainingCommand.Command.CommandId"
+          "CommandId.$" = "$.trainingCommand.CommandId"
           InstanceId    = aws_instance.training[0].id
+        }
+        # Keep logs in Systems Manager Run Command; only status fields are
+        # needed in the Step Functions execution history.
+        ResultSelector = {
+          "Status.$" = "$.Status"
         }
         ResultPath = "$.trainingInvocation"
         Retry = [{ ErrorEquals = ["Ssm.InvocationDoesNotExist", "Ssm.InternalServerError", "Ssm.ThrottlingException"], IntervalSeconds = 10, BackoffRate = 2, MaxAttempts = 6 }]
