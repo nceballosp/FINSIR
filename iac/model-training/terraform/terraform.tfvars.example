@@ -7,7 +7,7 @@ create_instance      = true
 instance_type        = "r7i.4xlarge"
 root_volume_size_gib = 300
 training_repo_url    = "https://github.com/nceballosp/FINSIR.git"
-training_repo_branch = "modelo"
+training_repo_branch = "main"
 training_repo_path   = "/opt/finsir-model-training/FINSIR"
 
 # Opcional: horario independiente para volver a entrenar. Dejalo apagado si
