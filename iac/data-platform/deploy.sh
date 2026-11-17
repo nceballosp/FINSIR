@@ -86,13 +86,19 @@ if [[ "$DO_UPLOAD" == "true" ]]; then
 fi
 
 # Run the whole batch via Step Functions: cleaning -> gold tables in parallel.
-# run_batch is the ready-made "aws stepfunctions start-execution ..." command;
-# it always carries the current gold jobs, so just run it.
+# Terraform output supplies the complete gold jobs payload, so adding a gold
+# table does not require editing this script.
+SM_ARN="$(terraform output -raw state_machine_arn 2>/dev/null || true)"
 RUN_BATCH="$(terraform output -raw run_batch 2>/dev/null || true)"
 ask_yes_no DO_BATCH "Start the batch now (Step Functions: cleaning -> gold tables)?" "n"
 if [[ "$DO_BATCH" == "true" ]]; then
-  if [[ -n "$RUN_BATCH" ]]; then
-    EXEC_ARN="$(eval "$RUN_BATCH --query executionArn --output text")"
+  if [[ -n "$SM_ARN" ]]; then
+    GOLD_INPUT="$(terraform output -raw gold_jobs_input)"
+    INPUT_FILE="$(mktemp "${TMPDIR:-/tmp}/finsir-gold-input-XXXXXX.json")"
+    trap 'rm -f -- "$INPUT_FILE"' EXIT
+    printf '%s' "$GOLD_INPUT" > "$INPUT_FILE"
+    EXEC_ARN="$(aws stepfunctions start-execution --state-machine-arn "$SM_ARN" \
+      --input "file://$INPUT_FILE" --region "$REGION" --query executionArn --output text)"
     echo "Batch started: $EXEC_ARN"
     echo "Follow it with:"
     echo "  aws stepfunctions describe-execution --execution-arn $EXEC_ARN --region $REGION --query status"

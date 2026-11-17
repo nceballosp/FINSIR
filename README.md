@@ -54,34 +54,76 @@ paralelo) que dispara una regla de EventBridge. Detalle de cada tabla en
 Los secretos nunca se escriben en el código. Los scripts te los piden al vuelo
 y no los guardan en archivos versionados.
 
-## Deploy (rápido, con los scripts)
+## Desplegar en AWS
 
-El deploy son dos pasos. Primero la plataforma de datos, luego la API (la API
-usa el bucket y las tablas de la plataforma). Cada script es interactivo: te
-pregunta los valores y hace el resto.
+Sigue este orden: prepara y ejecuta la plataforma de datos; opcionalmente
+entrena el modelo; y despliega la API al final. La API depende del bucket y las
+tablas Gold. Los lanzadores `.ps1` son para PowerShell; los `.sh`, para Bash en
+Linux/macOS, WSL o Git Bash. Ejecuta los comandos desde la raíz del repositorio.
+Necesitas AWS CLI v2, Terraform y credenciales válidas en el perfil que
+indicarás. Para desplegar la API también necesitas Docker.
 
 ### 1. Plataforma de datos
 
-```bash
-# Linux / macOS
-./iac/data-platform/deploy.sh
+El script pregunta perfil, región, nombre del bucket y si quieres activar el
+horario diario. Aplica Terraform y ofrece subir `data/train_ver2.csv` y
+arrancar el batch de Step Functions. Confirma que el batch completo termine
+con estado `SUCCEEDED` antes de seguir; incluye la limpieza y la creación de
+las tablas Gold.
 
-# Windows (PowerShell)
-./iac/data-platform/deploy.ps1
+```bash
+# Linux / macOS, WSL o Git Bash
+./iac/data-platform/deploy.sh
 ```
 
-Te pregunta perfil, región y bucket; aplica Terraform y, si quieres, sube el
-CSV y arranca el job de limpieza. Deja que la limpieza termine (estado
-`SUCCEEDED`) antes de construir las tablas gold.
+```powershell
+# Windows PowerShell
+.\iac\data-platform\deploy.ps1
+```
 
-### 2. API
+Si el CSV aún no está en `data/train_ver2.csv`, el script permite indicar su
+ruta. El horario de EventBridge queda desactivado por defecto; el batch también
+se puede iniciar manualmente con el comando que imprime el script.
+
+### 2. Entrenamiento del modelo (opcional)
+
+Si quieres habilitar recomendaciones basadas en el modelo, configura una vez
+el módulo de entrenamiento. Copia el archivo de ejemplo y edita
+`terraform.tfvars`: selecciona el bucket de la plataforma y establece
+`create_instance = true`.
 
 ```bash
-# Linux / macOS
-./iac/api/deploy.sh
+# Linux / macOS, WSL o Git Bash
+cp iac/model-training/terraform/terraform.tfvars.example iac/model-training/terraform/terraform.tfvars
+./iac/model-training/deploy.sh
+```
 
-# Windows (PowerShell)
-./iac/api/deploy.ps1
+```powershell
+# Windows PowerShell
+Copy-Item iac/model-training/terraform/terraform.tfvars.example iac/model-training/terraform/terraform.tfvars
+# Edita terraform.tfvars con el bucket existente y create_instance = true.
+.\iac\model-training\deploy.ps1
+```
+
+El lanzador aplica Terraform e inicia automáticamente una ejecución de
+`finsir-model-training`. Espera a que termine antes de desplegar la API con el
+artefacto. Cada ejecución del lanzador inicia un entrenamiento nuevo. El
+artefacto se guarda en `s3://<bucket>/models/production/finsir.joblib`.
+
+### 3. API
+
+Despliega la API después de que el batch de datos haya terminado. Si ejecutaste
+el entrenamiento, indica al lanzador el URI del artefacto S3 cuando lo solicite
+y acepta construir y subir la imagen actualizada a ECR.
+
+```bash
+# Linux / macOS, WSL o Git Bash
+./iac/api/deploy.sh
+```
+
+```powershell
+# Windows PowerShell
+.\iac\api\deploy.ps1
 ```
 
 Te pregunta perfil, región, cuenta y el secreto de auth; opcionalmente
@@ -91,43 +133,24 @@ pública (`http://<ip>:8080`), el secreto y el scope para generar tokens.
 > La IP es pública y cambia en cada redeploy. El script la resuelve y la
 > muestra al terminar.
 
-## Destroy (rápido, con el script)
+## Eliminar la infraestructura
 
-Un solo script derriba todo en el orden correcto (API primero, luego la
-plataforma). Te pregunta si borrar el data lake de S3 y la imagen de ECR.
+Un solo script derriba todo en el orden correcto (API primero, luego
+entrenamiento y plataforma). Te pregunta si borrar el data lake de S3 y la
+imagen de ECR.
 
 ```bash
-# Linux / macOS
+# Linux / macOS, WSL o Git Bash
 ./iac/destroy.sh
+```
 
-# Windows (PowerShell)
-./iac/destroy.ps1
+```powershell
+# Windows PowerShell
+.\iac\destroy.ps1
 ```
 
 Al terminar nada queda corriendo ni facturando (solo los datos de S3 que
 decidas conservar cuestan unos centavos).
-
-## Entrenar el modelo en EC2
-
-El entrenamiento tiene una Step Function propia. Primero ejecuta el batch de datos y confirma que `gold/train/` esté
-actualizado. Luego despliega el módulo de entrenamiento:
-
-```powershell
-cd iac/model-training/terraform
-Copy-Item terraform.tfvars.example terraform.tfvars
-# Ajusta bucket_name si el bucket no es finsir-<id de la cuenta AWS activa>.
-terraform init
-terraform plan -out tfplan
-terraform apply tfplan
-```
-
-En AWS, abre **Step Functions → State machines → `finsir-model-training` →
-Start execution** y usa `{}` como entrada. La máquina inicia la EC2, prepara el
-repositorio y sus dependencias, entrena con los datos Gold y detiene la EC2 al
-terminar. El artefacto se guarda en
-`s3://<bucket>/models/production/finsir.joblib`. Consulta
-[`iac/model-training/terraform/README.md`](iac/model-training/terraform/README.md)
-para configurar el repositorio o un horario opcional.
 
 ## Correr la API local (sin desplegar en AWS)
 

@@ -82,6 +82,10 @@ if [[ -n "$MODEL_S3_URI" && "$DO_BUILD" != "true" ]]; then
   exit 1
 fi
 if [[ "$DO_BUILD" == "true" ]]; then
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker Desktop is not running or its Linux container engine is unavailable. Start Docker Desktop, wait for the engine, and rerun this script." >&2
+    exit 1
+  fi
   if ! aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$REGION" >/dev/null 2>&1; then
     echo "Creating ECR repository $ECR_REPO..."
     aws ecr create-repository --repository-name "$ECR_REPO" --region "$REGION" >/dev/null
@@ -137,8 +141,8 @@ done
 echo
 echo "================ FINSIR API deployed ================"
 if [[ -n "$PUBLIC_IP" && "$PUBLIC_IP" != "None" ]]; then
-  echo "Public URL : http://${PUBLIC_IP}:${SERVICE_PORT:-8080}"
-  echo "Health     : http://${PUBLIC_IP}:${SERVICE_PORT:-8080}/health"
+  echo "Public URL : http://${PUBLIC_IP}:8080"
+  echo "Health     : http://${PUBLIC_IP}:8080/health"
 else
   echo "Public URL : task not RUNNING yet; re-run the IP lookup in terraform-ecs/README.md shortly."
 fi
