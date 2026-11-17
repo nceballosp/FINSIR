@@ -1,4 +1,5 @@
 data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
 
 data "aws_vpc" "default" {
   count   = var.create_instance && var.subnet_id == "" ? 1 : 0
@@ -160,11 +161,12 @@ resource "aws_instance" "training" {
   user_data = <<-USERDATA
     #!/bin/bash
     set -euo pipefail
-    dnf install -y python3.12 python3.12-pip git
+    dnf install -y python3.12 python3.12-pip git libgomp
     python3.12 -m pip install --upgrade pip
     mkdir -p /opt/finsir-model-training /mnt/finsir-duckdb-tmp
     chmod 0777 /opt/finsir-model-training
     chmod 1777 /mnt/finsir-duckdb-tmp
+    shutdown -h now
   USERDATA
 
   tags = { Name = "finsir-model-training" }

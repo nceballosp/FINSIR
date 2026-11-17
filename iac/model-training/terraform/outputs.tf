@@ -25,3 +25,18 @@ output "bucket_name" {
   description = "Bucket que Terraform usa para leer Gold y guardar el modelo."
   value       = local.bucket_name
 }
+
+output "training_state_machine_arn" {
+  description = "ARN de la Step Function que ejecuta el entrenamiento en la EC2."
+  value       = try(aws_sfn_state_machine.training[0].arn, "")
+}
+
+output "start_training_command" {
+  description = "Comando para iniciar manualmente el entrenamiento desde AWS CLI."
+  value = var.create_instance ? join(" ", [
+    "aws stepfunctions start-execution",
+    "--state-machine-arn ${aws_sfn_state_machine.training[0].arn}",
+    "--input '{}'",
+    "--region ${var.region}",
+  ]) : ""
+}
