@@ -116,11 +116,34 @@ if (Test-Path $DataTf) {
     terraform -chdir="$DataTf" destroy -auto-approve -var="force_destroy_bucket=true"
   } else {
     Write-Host "Keeping the S3 bucket. Removing it from Terraform state so destroy leaves it alone..."
-    foreach ($addr in @(
+    $BucketStateAddresses = @(
       'aws_s3_bucket.lake[0]',
       'aws_s3_bucket_public_access_block.lake[0]',
-      'aws_s3_bucket_server_side_encryption_configuration.lake[0]')) {
-      terraform -chdir="$DataTf" state rm $addr 2>$null | Out-Null
+      'aws_s3_bucket_server_side_encryption_configuration.lake[0]')
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+      # Terraform writes some diagnostics to stderr; PowerShell 7 can treat
+      # native stderr as a terminating error when the preference is Stop.
+      $ErrorActionPreference = "Continue"
+      $StateAddresses = @(terraform -chdir="$DataTf" state list 2>$null)
+      $stateListExitCode = $LASTEXITCODE
+    } finally {
+      $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($stateListExitCode -ne 0) { throw "Could not read Terraform state in $DataTf; refusing to continue without the S3 bucket state check." }
+
+    foreach ($addr in $BucketStateAddresses) {
+      if ($StateAddresses -contains $addr) {
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+          $ErrorActionPreference = "Continue"
+          terraform -chdir="$DataTf" state rm $addr 2>$null | Out-Null
+          $stateRmExitCode = $LASTEXITCODE
+        } finally {
+          $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($stateRmExitCode -ne 0) { throw "Could not remove '$addr' from Terraform state; refusing to destroy the data platform." }
+      }
     }
     terraform -chdir="$DataTf" destroy -auto-approve
   }

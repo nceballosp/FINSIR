@@ -128,7 +128,9 @@ locals {
         Parameters = {
           DocumentName = "AWS-RunShellScript"
           InstanceIds  = [aws_instance.training[0].id]
-          Parameters = { commands = [local.training_command], executionTimeout = ["86400"] }
+          # The Terraform file may use CRLF on Windows; strip carriage returns
+          # so AWS-RunShellScript receives valid Unix shell lines.
+          Parameters = { commands = [replace(local.training_command, "\r", "")], executionTimeout = ["86400"] }
         }
         ResultPath = "$.trainingCommand"
         Retry = [{ ErrorEquals = ["Ssm.InternalServerError", "Ssm.ThrottlingException"], IntervalSeconds = 10, BackoffRate = 2, MaxAttempts = 3 }]

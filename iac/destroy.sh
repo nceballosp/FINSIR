@@ -124,12 +124,23 @@ if [[ -d "$DATA_TF" ]]; then
     terraform -chdir="$DATA_TF" destroy -auto-approve -var="force_destroy_bucket=true"
   else
     echo "Keeping the S3 bucket. Removing it from Terraform state so destroy leaves it alone..."
-    # Drop the bucket and its config from state so destroy won't touch it.
+    # Inspect state first so missing addresses are skipped, while real errors
+    # stop the teardown before Terraform can destroy the bucket.
+    if ! state_addresses="$(terraform -chdir="$DATA_TF" state list)"; then
+      echo "Could not read Terraform state in $DATA_TF; refusing to continue without the S3 bucket state check." >&2
+      exit 1
+    fi
+
     for addr in \
       'aws_s3_bucket.lake[0]' \
       'aws_s3_bucket_public_access_block.lake[0]' \
       'aws_s3_bucket_server_side_encryption_configuration.lake[0]'; do
-      terraform -chdir="$DATA_TF" state rm "$addr" >/dev/null 2>&1 || true
+      if grep -Fxq -- "$addr" <<< "$state_addresses"; then
+        if ! terraform -chdir="$DATA_TF" state rm "$addr"; then
+          echo "Could not remove '$addr' from Terraform state; refusing to destroy the data platform." >&2
+          exit 1
+        fi
+      fi
     done
     terraform -chdir="$DATA_TF" destroy -auto-approve
   fi
