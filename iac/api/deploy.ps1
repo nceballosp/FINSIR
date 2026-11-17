@@ -71,6 +71,19 @@ if (-not [string]::IsNullOrWhiteSpace($ModelS3Uri) -and $BuildImage -ne "true") 
   throw "The recommendation routes require the updated API image. Choose Yes to build and push it."
 }
 if ($BuildImage -eq "true") {
+  # Fail before Terraform if Docker Desktop's Linux engine is unavailable.
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    docker info 2>$null | Out-Null
+    $dockerInfoExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+  if ($dockerInfoExitCode -ne 0) {
+    throw "Docker Desktop is not running or its Linux container engine is unavailable. Start Docker Desktop, wait for the engine, and rerun this script."
+  }
+
   # AWS CLI writes "repository not found" to stderr and exits non-zero. With
   # $ErrorActionPreference=Stop, PowerShell 7 can promote that stderr output
   # to a terminating NativeCommandError before we inspect $LASTEXITCODE.
@@ -88,9 +101,20 @@ if ($BuildImage -eq "true") {
     if ($LASTEXITCODE -ne 0) { throw "Could not create ECR repository '$EcrRepo'. Check AWS credentials, permissions, and region." }
   }
   $registry = $EcrUrl.Split('/')[0]
-  aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $registry
+  $ecrPassword = aws ecr get-login-password --region $Region
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ecrPassword)) {
+    throw "Could not obtain an ECR login token. Check AWS credentials and permissions."
+  }
+  $ecrPassword | docker login --username AWS --password-stdin $registry
+  $loginExitCode = $LASTEXITCODE
+  Remove-Variable ecrPassword -ErrorAction SilentlyContinue
+  if ($loginExitCode -ne 0) { throw "Docker could not log in to ECR. Check the Docker engine and AWS region/account." }
+
   docker build -t "${EcrUrl}:${ImageTag}" $ApiDir
+  if ($LASTEXITCODE -ne 0) { throw "Docker image build failed; Terraform was not applied." }
+
   docker push "${EcrUrl}:${ImageTag}"
+  if ($LASTEXITCODE -ne 0) { throw "Docker image push failed; Terraform was not applied." }
 }
 
 @"
