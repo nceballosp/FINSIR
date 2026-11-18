@@ -71,3 +71,6 @@ Thumbs.db
 
 # Raw datasets (large; uploaded to S3 manually, not versioned)
 data/
+
+# Caché local del tablero (datos de la API)
+dashboard/.cache/

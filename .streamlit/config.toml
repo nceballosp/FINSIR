@@ -1,0 +1,43 @@
+# Tema del tablero FINSIR (dashboard/app.py).
+# Paleta: azul marino como color principal, ámbar solo para el dato clave,
+# fondo blanco y grises para el contexto. Validada para daltonismo y contraste.
+
+[server]
+headless = true
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+primaryColor = "#23549A"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F6F9"
+textColor = "#1A2433"
+linkColor = "#23549A"
+linkUnderline = false
+borderColor = "#E3E8EF"
+showWidgetBorder = true
+baseRadius = "6px"
+buttonRadius = "6px"
+font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+headingFont = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+codeFont = "IBM Plex Mono:https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+baseFontSize = 15
+headingFontWeights = [700, 600, 600, 600, 600, 600]
+metricValueFontWeight = 600
+dataframeHeaderBackgroundColor = "#F4F6F9"
+chartCategoricalColors = ["#23549A", "#E09A00", "#9AA5B4"]
+chartSequentialColors = ["#C9D8EB", "#B3C8E2", "#9DB7D8", "#86A7CF", "#6F97C6", "#5782B7", "#3F6EA8", "#23549A", "#163A6B", "#0B2545"]
+
+[theme.sidebar]
+backgroundColor = "#0B2545"
+secondaryBackgroundColor = "#14335A"
+textColor = "#E8EEF6"
+borderColor = "#1F416D"
+primaryColor = "#E09A00"
+linkColor = "#E8EEF6"

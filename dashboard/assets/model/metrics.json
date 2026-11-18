@@ -1,0 +1,245 @@
+{
+  "model_version": "20261118T031258Z",
+  "source": "s3://finsir-<account-id>/gold/train/",
+  "rows": {
+    "train": 10812701,
+    "validation": 923414,
+    "test": 926663,
+    "inference": 931453
+  },
+  "clients": {
+    "train": 930472,
+    "validation": 923414,
+    "test": 926663,
+    "inference": 931453
+  },
+  "temporal_cuts": {
+    "train_max_feature_month": "2016-02-28",
+    "validation_month": "2016-03-28",
+    "test_month": "2016-04-28",
+    "inference_month": "2016-05-28",
+    "inference_target_month": "month following inference_month"
+  },
+  "feature_count": 142,
+  "products": [
+    "ind_ahor_fin_ult1",
+    "ind_aval_fin_ult1",
+    "ind_cco_fin_ult1",
+    "ind_cder_fin_ult1",
+    "ind_cno_fin_ult1",
+    "ind_ctju_fin_ult1",
+    "ind_ctma_fin_ult1",
+    "ind_ctop_fin_ult1",
+    "ind_ctpp_fin_ult1",
+    "ind_deco_fin_ult1",
+    "ind_dela_fin_ult1",
+    "ind_deme_fin_ult1",
+    "ind_ecue_fin_ult1",
+    "ind_fond_fin_ult1",
+    "ind_hip_fin_ult1",
+    "ind_nom_pens_ult1",
+    "ind_nomina_ult1",
+    "ind_plan_fin_ult1",
+    "ind_pres_fin_ult1",
+    "ind_reca_fin_ult1",
+    "ind_recibo_ult1",
+    "ind_tjcr_fin_ult1",
+    "ind_valo_fin_ult1",
+    "ind_viv_fin_ult1"
+  ],
+  "hyperparameter_tuning": {
+    "scope": "all 24 products jointly",
+    "grid": [
+      {
+        "num_leaves": 31,
+        "min_data_in_leaf": 20,
+        "learning_rate": 0.05,
+        "feature_fraction": 0.8,
+        "best_iteration": 333,
+        "validation_MAP_at_7": 0.025528868660330772
+      },
+      {
+        "num_leaves": 64,
+        "min_data_in_leaf": 10,
+        "learning_rate": 0.1,
+        "feature_fraction": 0.8,
+        "best_iteration": 97,
+        "validation_MAP_at_7": 0.02550165355205536
+      },
+      {
+        "num_leaves": 64,
+        "min_data_in_leaf": 25,
+        "learning_rate": 0.05,
+        "feature_fraction": 0.9,
+        "best_iteration": 202,
+        "validation_MAP_at_7": 0.025519978255033493
+      },
+      {
+        "num_leaves": 96,
+        "min_data_in_leaf": 10,
+        "learning_rate": 0.05,
+        "feature_fraction": 0.8,
+        "best_iteration": 201,
+        "validation_MAP_at_7": 0.02550521306693554
+      }
+    ],
+    "selected": {
+      "num_leaves": 31,
+      "min_data_in_leaf": 20,
+      "learning_rate": 0.05,
+      "feature_fraction": 0.8
+    },
+    "selected_iterations": 333
+  },
+  "validation_comparison": [
+    {
+      "modelo": "lightgbm",
+      "MAP@7": 0.025528868660330772,
+      "hit_rate@7": 0.02875416660349529
+    },
+    {
+      "modelo": "popularidad",
+      "MAP@7": 0.01871045120060444,
+      "hit_rate@7": 0.027650652903248165
+    }
+  ],
+  "test_metrics": [
+    {
+      "modelo": "popularidad",
+      "MAP@7": 0.019522136077284813,
+      "hit_rate@7": 0.02902349613613579
+    },
+    {
+      "modelo": "lightgbm",
+      "MAP@7": 0.02681683376431465,
+      "hit_rate@7": 0.02984903897101751
+    }
+  ],
+  "bias_variance_diagnosis": {
+    "train_MAP_at_7": 0.03205731138586998,
+    "validation_MAP_at_7": 0.025528868660330772,
+    "train_validation_gap": 0.0065284427255392075
+  },
+  "business_simulation": {
+    "assumed_contacts": 1000,
+    "observed_model_successes_at_7": 29.84903897101751,
+    "observed_baseline_successes_at_7": 29.02349613613579,
+    "estimated_difference_vs_baseline": 0.8255428348817213,
+    "interpretation": "Holdout simulation only; observed association is not causal campaign uplift."
+  },
+  "top_global_features": [
+    {
+      "feature": "ind_recibo_ult1",
+      "importance": 1072651.7072793434
+    },
+    {
+      "feature": "ind_cco_fin_ult1",
+      "importance": 1014611.6520370382
+    },
+    {
+      "feature": "ind_cno_fin_ult1",
+      "importance": 824743.5486931426
+    },
+    {
+      "feature": "n_products_dropped",
+      "importance": 819172.324115349
+    },
+    {
+      "feature": "ind_nom_pens_ult1",
+      "importance": 554136.5383930296
+    },
+    {
+      "feature": "n_products",
+      "importance": 546495.646507246
+    },
+    {
+      "feature": "antiguedad",
+      "importance": 525143.4983140378
+    },
+    {
+      "feature": "month_of_year",
+      "importance": 364280.50333728717
+    },
+    {
+      "feature": "ind_tjcr_fin_ult1",
+      "importance": 361082.1484102729
+    },
+    {
+      "feature": "ind_recibo_ult1_lag1",
+      "importance": 334289.5232469033
+    },
+    {
+      "feature": "age",
+      "importance": 315496.2336055109
+    },
+    {
+      "feature": "ind_nomina_ult1",
+      "importance": 269655.2679221231
+    },
+    {
+      "feature": "canal_entrada",
+      "importance": 260328.11100299656
+    },
+    {
+      "feature": "ind_nom_pens_ult1_lag1",
+      "importance": 258957.36961669027
+    },
+    {
+      "feature": "ind_cno_fin_ult1_lag1",
+      "importance": 256032.29916212385
+    },
+    {
+      "feature": "ind_tjcr_fin_ult1_lag1",
+      "importance": 213926.6565328494
+    },
+    {
+      "feature": "ind_tjcr_fin_ult1_lag3",
+      "importance": 207615.85096577395
+    },
+    {
+      "feature": "ind_ctma_fin_ult1_lag1",
+      "importance": 171498.3698270359
+    },
+    {
+      "feature": "added_ind_nom_pens_ult1",
+      "importance": 161222.382766366
+    },
+    {
+      "feature": "ind_nomina_ult1_lag1",
+      "importance": 140723.96965229546
+    }
+  ],
+  "example_customer_id": 15945,
+  "example_recommendations": [
+    {
+      "producto": "ind_cco_fin_ult1",
+      "score": 0.46142587065696716
+    },
+    {
+      "producto": "ind_tjcr_fin_ult1",
+      "score": 0.31384772062301636
+    },
+    {
+      "producto": "ind_recibo_ult1",
+      "score": 0.06251199543476105
+    },
+    {
+      "producto": "ind_ecue_fin_ult1",
+      "score": 0.03433340787887573
+    },
+    {
+      "producto": "ind_ctop_fin_ult1",
+      "score": 0.03247321397066116
+    },
+    {
+      "producto": "ind_valo_fin_ult1",
+      "score": 0.02688528224825859
+    },
+    {
+      "producto": "ind_cno_fin_ult1",
+      "score": 0.018588155508041382
+    }
+  ],
+  "artifact": "artifacts/finsir_lightgbm_full.joblib",
+  "artifact_s3_uri": "s3://finsir-<account-id>/models/production/finsir.joblib"
+}
