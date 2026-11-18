@@ -32,6 +32,47 @@ Antes de una presentación, precarga la caché para que todo abra al instante:
 La caché queda en `dashboard/.cache/` (ignorada por git). Bórrala para forzar
 datos frescos de la API.
 
+## Publicar en Streamlit Community Cloud
+
+El tablero corre en la nube de Streamlit y consulta la API en AWS. Requisitos:
+la rama subida a GitHub, la API corriendo en ECS y una cuenta en
+[share.streamlit.io](https://share.streamlit.io) conectada a GitHub con acceso
+al repositorio.
+
+1. **Obtén la URL actual de la API** (cambia en cada redespliegue de ECS):
+
+   ```powershell
+   .\dashboard\get_api_url.ps1
+   ```
+
+2. En [share.streamlit.io](https://share.streamlit.io) → **Create app** →
+   **Deploy a public app from GitHub**:
+   - **Repository:** `nceballosp/FINSIR`
+   - **Branch:** la rama del tablero
+   - **Main file path:** `dashboard/app.py`
+   - **App URL:** el subdominio que quieras (por ejemplo `finsir-dashboard`)
+3. **Advanced settings:**
+   - **Python version:** 3.12 (pandas 3 necesita Python 3.11 o superior).
+   - **Secrets:** pega el contenido de `.streamlit/secrets.toml.example` con
+     los valores reales (la URL del paso 1 y el secreto de la API).
+4. **Deploy.** Streamlit instala `dashboard/requirements.txt` (lo busca junto a
+   `app.py`) y aplica el tema de `.streamlit/config.toml`.
+
+**Si cambia la IP de la API** (después de `iac/api/deploy.ps1` o de destruir y
+volver a crear la infraestructura): ejecuta de nuevo `get_api_url.ps1`, entra a
+la app en Streamlit → **Settings → Secrets**, reemplaza `API_BASE_URL` y guarda.
+La app se reinicia sola.
+
+Tenlo en cuenta:
+
+- **La app es pública.** Cualquiera con el enlace puede verla, igual que la API.
+- **La caché en disco de la nube se borra en cada reinicio**, así que las
+  primeras cargas tardan lo que tarde la API (hasta ~1 min por vista). Abre
+  las páginas una vez antes de presentar.
+- **Si apagas la infraestructura de AWS, la app en la nube deja de tener datos.**
+  Para presentar sin depender de la red, usa la versión local con la caché
+  precargada.
+
 ## Recorrido (argumentación visual)
 
 | Página | Pregunta que responde | Interacción |

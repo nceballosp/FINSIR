@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Muestra la URL pública actual de la API FINSIR en ECS Fargate.
 .DESCRIPTION
