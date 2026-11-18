@@ -1,0 +1,80 @@
+{
+  "_fuente": "Salidas de notebooks/prueba_modelo.ipynb (muestra reproducible del 10 % de clientes de gold_train: hash(ncodpers) % 10 = 0). Si tienes el metrics.json del entrenamiento completo (iac/model-training/train.py), ponlo en visualizacion/datos/modelo/ y el dashboard lo usa en su lugar.",
+  "alcance": "Muestra del 10 % de clientes (1.368.376 filas, 95.426 clientes, 17 meses)",
+  "cortes_temporales": {
+    "train_hasta": "2016-02-28",
+    "validacion": "2016-03-28",
+    "prueba": "2016-04-28",
+    "inferencia": "2016-05-28",
+    "filas_train": 1086091,
+    "filas_validacion": 92873,
+    "filas_prueba": 93201,
+    "filas_inferencia": 93640
+  },
+  "comparacion_validacion": [
+    {"modelo": "Popularidad (base)", "map7": 0.018891, "pr_auc": null},
+    {"modelo": "Regresión logística", "map7": 0.024956, "pr_auc": 0.145565},
+    {"modelo": "Random Forest", "map7": 0.025166, "pr_auc": 0.208528},
+    {"modelo": "LightGBM", "map7": 0.025409, "pr_auc": 0.224165}
+  ],
+  "prueba": [
+    {"modelo": "Popularidad (base)", "map7": 0.019577, "hit_rate": 0.029485},
+    {"modelo": "LightGBM", "map7": 0.027041, "hit_rate": 0.030246}
+  ],
+  "diagnostico": {"train_map7": 0.03337, "validacion_map7": 0.02541, "gap": 0.00796},
+  "ajuste_hiperparametros": [
+    {"num_leaves": 15, "min_child_samples": 80, "pr_auc_validacion": 0.3786},
+    {"num_leaves": 31, "min_child_samples": 50, "pr_auc_validacion": 0.375456},
+    {"num_leaves": 31, "min_child_samples": 100, "pr_auc_validacion": 0.375043}
+  ],
+  "por_segmento": [
+    {"dimension": "Edad", "valor": "≤24", "clientes": 23414, "map7": 0.009498, "hit_rate": 0.010507},
+    {"dimension": "Edad", "valor": "25-34", "clientes": 17841, "map7": 0.029398, "hit_rate": 0.032958},
+    {"dimension": "Edad", "valor": "35-44", "clientes": 17564, "map7": 0.041647, "hit_rate": 0.046288},
+    {"dimension": "Edad", "valor": "45-54", "clientes": 16840, "map7": 0.0377, "hit_rate": 0.041805},
+    {"dimension": "Edad", "valor": "55-64", "clientes": 8365, "map7": 0.028904, "hit_rate": 0.033353},
+    {"dimension": "Edad", "valor": "65+", "clientes": 9177, "map7": 0.018007, "hit_rate": 0.020595},
+    {"dimension": "Renta", "valor": "≤50k", "clientes": 7502, "map7": 0.017441, "hit_rate": 0.019461},
+    {"dimension": "Renta", "valor": "50-100k", "clientes": 27152, "map7": 0.023412, "hit_rate": 0.026002},
+    {"dimension": "Renta", "valor": "100-150k", "clientes": 17141, "map7": 0.02671, "hit_rate": 0.030045},
+    {"dimension": "Renta", "valor": "150-250k", "clientes": 12781, "map7": 0.030048, "hit_rate": 0.033487},
+    {"dimension": "Renta", "valor": ">250k", "clientes": 6130, "map7": 0.02715, "hit_rate": 0.030343},
+    {"dimension": "Renta", "valor": "Sin dato", "clientes": 22495, "map7": 0.033138, "hit_rate": 0.037253},
+    {"dimension": "Segmento", "valor": "01 - TOP (VIP)", "clientes": 3538, "map7": 0.078515, "hit_rate": 0.089599},
+    {"dimension": "Segmento", "valor": "02 - Particulares", "clientes": 54545, "map7": 0.03335, "hit_rate": 0.03729},
+    {"dimension": "Segmento", "valor": "03 - Universitario", "clientes": 34914, "map7": 0.012099, "hit_rate": 0.013376},
+    {"dimension": "Sexo", "valor": "H", "clientes": 42800, "map7": 0.023152, "hit_rate": 0.025888},
+    {"dimension": "Sexo", "valor": "V", "clientes": 50401, "map7": 0.030344, "hit_rate": 0.033948}
+  ],
+  "importancia_variables": [
+    {"feature": "ind_nom_pens_ult1_lag1", "gain": 248234.68},
+    {"feature": "ind_nomina_ult1_lag1", "gain": 181533.17},
+    {"feature": "ind_recibo_ult1_lag1", "gain": 173365.58},
+    {"feature": "ind_actividad_cliente", "gain": 148701.33},
+    {"feature": "ind_cno_fin_ult1", "gain": 143132.79},
+    {"feature": "tiprel_1mes", "gain": 142006.61},
+    {"feature": "antiguedad", "gain": 132442.04},
+    {"feature": "ind_tjcr_fin_ult1_lag1", "gain": 113964.58},
+    {"feature": "ind_nom_pens_ult1", "gain": 99741.27},
+    {"feature": "canal_entrada", "gain": 91582.72},
+    {"feature": "n_products", "gain": 90873.97},
+    {"feature": "age", "gain": 80424.98},
+    {"feature": "month_of_year", "gain": 57168.57},
+    {"feature": "ind_recibo_ult1_lag3", "gain": 51249.85},
+    {"feature": "ind_cno_fin_ult1_lag1", "gain": 49218.78}
+  ],
+  "ejemplo_recomendacion": {
+    "ncodpers": 16707,
+    "mes_base": "2016-05-28",
+    "items": [
+      {"product": "ind_recibo_ult1", "score": 0.004336},
+      {"product": "ind_tjcr_fin_ult1", "score": 0.000861},
+      {"product": "ind_nomina_ult1", "score": 0.000515},
+      {"product": "ind_nom_pens_ult1", "score": 0.000477},
+      {"product": "ind_ecue_fin_ult1", "score": 0.000385},
+      {"product": "ind_cno_fin_ult1", "score": 0.000272},
+      {"product": "ind_ctop_fin_ult1", "score": 0.000241}
+    ]
+  },
+  "negocio_por_1000_contactos": {"modelo": 30.2, "base": 29.5}
+}

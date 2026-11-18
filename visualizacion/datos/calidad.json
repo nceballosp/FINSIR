@@ -1,0 +1,17 @@
+{
+  "filas": 13647309,
+  "clientes": 956645,
+  "meses": 17,
+  "fecha_min": "2015-01-28",
+  "fecha_max": "2016-05-28",
+  "pct_renta_nula": 0.20475648349429182,
+  "pct_edad_nula": 0.0020338075440367036,
+  "pct_segmento_nulo": 0.013875849077646003,
+  "pct_sexo_nulo": 0.002037324720939491,
+  "edades_invalidas": 22,
+  "antiguedades_invalidas": 38,
+  "productos_promedio": 1.4620212673428878,
+  "productos": 24,
+  "top_k": 7,
+  "mes_referencia": "2016-05-28"
+}
