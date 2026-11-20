@@ -457,12 +457,17 @@ elif sec == SECCIONES[1]:
             a = prof.groupby("Segmento", as_index=False).agg(clients=("clients", "sum"),
                                                              prods=("sum_products", "sum"))
             a["avg"] = a.prods / a.clients
+            a["share"] = a.clients / a.clients.sum()
             destacado = a.clients.idxmax() if seg == "Todos" else a.index[a.Segmento == seg][0]
             segment_colors = [BLUE if idx == destacado else SOFT for idx in a.index]
             fig = go.Figure(go.Bar(x=a.Segmento, y=a.clients, marker=dict(color=segment_colors, cornerradius=4),
-                                   customdata=a[["avg"]],
-                                   hovertemplate="%{x}: %{y:,} clientes<br>%{customdata[0]:.2f} "
-                                   "productos promedio<extra></extra>"))
+                                   customdata=a[["avg", "share"]],
+                                   text=[pct(x, 0) if x >= 0.01 else "<1 %" for x in a.share],
+                                   textposition="outside", textfont=dict(color=INK, size=13),
+                                   cliponaxis=False,
+                                   hovertemplate="%{x}: %{y:,} clientes (%{customdata[1]:.1%})"
+                                   "<br>%{customdata[0]:.2f} productos promedio<extra></extra>"))
+            fig.update_yaxes(range=[0, a.clients.max() * 1.15])
             fig.update_layout(
                 title="Clientes por segmento" if seg == "Todos"
                 else f"Clientes por segmento · {seg} resaltado")
