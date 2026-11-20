@@ -370,7 +370,7 @@ if sec == SECCIONES[0]:
 # 2 · LOS DATOS
 # ===========================================================================
 elif sec == SECCIONES[1]:
-    st.title("¿Cómo son los clientes y qué productos tienen?")
+    st.title("Los clientes son muy distintos: no sirve una oferta única")
     k = KPI_LAST.sort_values("penetration_rate")
     top = k.iloc[-1]
     colors_pen = [ORANGE if name == top.nombre else BLUE for name in k.nombre]
@@ -536,12 +536,14 @@ elif sec == SECCIONES[2]:
 # 4 · RESULTADOS
 # ===========================================================================
 elif sec == SECCIONES[3]:
-    st.title("Conclusiones")
-
     test = {r["modelo"]: r for r in M["prueba"]}
     lgb_t, base_t = test["LightGBM"], test["Popularidad (base)"]
     lift = lgb_t["map7"] / base_t["map7"] - 1
     cuts = M["cortes_temporales"]
+    _val = {row["modelo"]: row["map7"] for row in M["comparacion_validacion"]}
+    _mejora = _val["LightGBM"] / _val["Popularidad (base)"] - 1
+    st.title(f"LightGBM recomienda un {dec(_mejora * 100, 1)} % mejor que ofrecer lo más "
+             "popular")
 
     l, r = st.columns([3, 2])
     with l:
@@ -601,7 +603,7 @@ elif sec == SECCIONES[3]:
             customdata=model_plot[["puesto", "score"]],
             hovertemplate="Puesto %{customdata[0]} · propensión %{customdata[1]:.4f}"
                           "<br><b>%{y}</b><extra></extra>"))
-        fig.update_layout(title="FINSIR · LightGBM", xaxis_title="Propensión %",
+        fig.update_layout(title="FINSIR · LightGBM", xaxis_title="Prioridad",
                           xaxis=dict(range=[0, 7.5], dtick=1),
                           yaxis=dict(categoryorder="array",
                                      categoryarray=model_plot["product"].map(
@@ -628,4 +630,13 @@ elif sec == SECCIONES[3]:
         chart(style(fig, 340), "example_baseline")
         test_metrics = {r["modelo"]: r for r in M["prueba"]}
         baseline_map7 = test_metrics["Popularidad (base)"]["map7"]
+
+    st.subheader("Conclusiones")
+    st.success(
+        f"1. **Objetivo cumplido:** personalizar con el historial del cliente recomienda "
+        f"{dec(_mejora * 100, 1)} % mejor (MAP@7) que ofrecer a todos lo más popular.\n"
+        "2. **La historia del cliente es la mejor pista:** los productos que tuvo los meses "
+        "anteriores pesan más que su perfil demográfico.\n"
+        "3. **Es un sistema completo:** datos en AWS, modelo servido por una API y este "
+        "tablero, todo reproducible con Terraform.")
     nav_buttons("s4")
