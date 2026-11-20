@@ -458,6 +458,7 @@ elif sec == SECCIONES[1]:
                                                              prods=("sum_products", "sum"))
             a["avg"] = a.prods / a.clients
             a["share"] = a.clients / a.clients.sum()
+            a = a.sort_values("clients", ascending=False).reset_index(drop=True)  # mayor a menor
             destacado = a.clients.idxmax() if seg == "Todos" else a.index[a.Segmento == seg][0]
             segment_colors = [BLUE if idx == destacado else SOFT for idx in a.index]
             fig = go.Figure(go.Bar(x=a.Segmento, y=a.clients, marker=dict(color=segment_colors, cornerradius=4),
