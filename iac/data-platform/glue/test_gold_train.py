@@ -104,7 +104,7 @@ def test_keeps_every_row_and_the_documented_columns(spark):
     assert gold.count() == len(rows)
     assert gold.columns == gt.gold_columns() + ["fecha_dato"]
     assert "nomprov" not in gold.columns
-    assert len(gold.columns) == 169
+    assert len(gold.columns) == 289
 
 
 def test_label_is_an_addition_in_the_next_month(spark):
@@ -145,8 +145,12 @@ def test_lags_counts_and_month_of_year(spark):
     g = build(spark, rows)
     july = g[(1, 7)]
     assert july[gt.lag_column(CCO, 1)] == 1  # June
+    assert july[gt.lag_column(CCO, 2)] == 0  # May
     assert july[gt.lag_column(CCO, 3)] == 0  # April
+    assert july[gt.lag_column(CCO, 5)] == 0  # February
     assert july[gt.lag_column(CCO, 6)] == 1  # January
+    assert july[gt.history_count_column(CCO, 3)] == 1  # June-May-April
+    assert july[gt.history_count_column(CCO, 6)] == 2  # January and June
     assert july["n_products"] == 1
     assert july["n_products_added"] == 1 and july["n_products_dropped"] == 1
     assert july["month_of_year"] == 7

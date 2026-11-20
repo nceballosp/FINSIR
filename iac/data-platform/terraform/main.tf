@@ -172,13 +172,15 @@ locals {
     "indrel", "indrel_1mes", "tiprel_1mes", "indresi", "indext", "canal_entrada",
     "indfall", "cod_prov", "ind_actividad_cliente", "renta", "segmento",
   ]
-  gold_lags = [1, 3, 6]
+  gold_lags = [1, 2, 3, 4, 5, 6]
+  gold_history_windows = [3, 6]
 
   columnas_gold = concat(
     [{ name = "ncodpers", type = "bigint" }, { name = "month_of_year", type = "int" }],
     [for c in local.gold_profile : { name = c, type = local.silver_types[c] }],
     [for p in local.gold_products : { name = p, type = "int" }],
     flatten([for k in local.gold_lags : [for p in local.gold_products : { name = "${p}_lag${k}", type = "int" }]]),
+    flatten([for k in local.gold_history_windows : [for p in local.gold_products : { name = "${p}_history_count${k}m", type = "int" }]]),
     [for p in local.gold_products : { name = "added_${p}", type = "int" }],
     [for c in ["n_products", "n_products_added", "n_products_dropped", "has_previous_month"] : { name = c, type = "int" }],
     [for p in local.gold_products : { name = "label_next_${p}", type = "int" }],

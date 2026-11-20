@@ -6,11 +6,11 @@ the gold row count differs from the silver row count.
 Each row (client ncodpers, month t) holds:
   - Profile features: silver columns as of month t.
   - Holdings: the 24 products held in month t.
-  - History features: holdings in months t-1, t-3 and t-6 (calendar months, so
-    a skipped month gives null, never an older value), per-product "added in
-    month t" flags (prefix added_, 0 in t-1 and 1 in t), and counts of products
-    held, added and dropped in month t. The added_ flags are null when month
-    t-1 does not exist for the client.
+  - History features: holdings in each month t-1 through t-6 (calendar months, so
+    a skipped month gives null, never an older value), per-product counts of
+    held months in the previous 3 and 6 months, per-product "added in month t"
+    flags (prefix added_, 0 in t-1 and 1 in t), and counts of products held,
+    added and dropped in month t. The added_ flags are null when t-1 is absent.
   - Labels (prefix label_next_): 1 if the client adds the product in month t+1
     (0 in t, 1 in t+1). Null when month t+1 does not exist for the client, which
     is always the case for the last month. Labels must never be used as model
@@ -79,7 +79,8 @@ PROFILE_COLUMNS = [
     "renta",
     "segmento",
 ]
-LAGS = (1, 3, 6)
+LAGS = (1, 2, 3, 4, 5, 6)
+HISTORY_WINDOWS = (3, 6)
 ADDED_PREFIX = "added_"
 LABEL_PREFIX = "label_next_"
 COUNT_COLUMNS = [
@@ -98,6 +99,10 @@ def added_column(product):
     return f"{ADDED_PREFIX}{product}"
 
 
+def history_count_column(product, months):
+    return f"{product}_history_count{months}m"
+
+
 def label_column(product):
     return f"{LABEL_PREFIX}{product}"
 
@@ -109,6 +114,7 @@ def gold_columns():
         + PROFILE_COLUMNS
         + PRODUCTS
         + [lag_column(p, k) for k in LAGS for p in PRODUCTS]
+        + [history_count_column(p, k) for k in HISTORY_WINDOWS for p in PRODUCTS]
         + [added_column(p) for p in PRODUCTS]
         + COUNT_COLUMNS
         + [label_column(p) for p in PRODUCTS]
@@ -156,6 +162,15 @@ def build_gold(silver):
         F.month("fecha_dato").alias("month_of_year"),
         *[
             F.when(F.col("_has_prev"), added_now[p].cast("int")).alias(added_column(p))
+            for p in PRODUCTS
+        ],
+        *[
+            sum(
+                (F.when(F.col(lag_column(p, lag)) == 1, F.lit(1)).otherwise(F.lit(0))
+                 for lag in range(1, months + 1)),
+                F.lit(0),
+            ).alias(history_count_column(p, months))
+            for months in HISTORY_WINDOWS
             for p in PRODUCTS
         ],
         count_true(held(p) for p in PRODUCTS).alias("n_products"),

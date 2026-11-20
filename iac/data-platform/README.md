@@ -152,14 +152,13 @@ antes, y las respuestas: qué productos adquiere `c` en el mes `t+1`.
 
 ### Columnas de producto
 
-Cada uno de los 24 productos tiene cinco columnas. Las familias:
+Cada uno de los 24 productos tiene una columna de tenencia, seis lags, dos resúmenes de historial, una feature de alta actual y una etiqueta de alta futura. Las familias:
 
 | Patrón de columna      | Tipo | Origen   | Descripción                                                                                                                                       |
 | ---------------------- | ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `<product>`            | int  | raw      | 1 si el cliente tiene el producto en el mes `t`, 0 si no, null si falta en el CSV.                                                                |
-| `<product>_lag1`       | int  | computed | `<product>` en el mes `t-1`. Null si el cliente no tiene fila ese mes o el valor falta.                                                           |
-| `<product>_lag3`       | int  | computed | `<product>` en el mes `t-3`. Misma regla de null.                                                                                                 |
-| `<product>_lag6`       | int  | computed | `<product>` en el mes `t-6`. Misma regla de null.                                                                                                 |
+| `<product>_lagN`       | int  | computed | Una columna por `N` de 1 a 6, con `<product>` en el mes `t-N`. Null si falta esa fila mensual o el valor.                                          |
+| `<product>_history_countNm` | int | computed | Número de meses con el producto en los últimos `N` meses (ventanas de 3 y 6 meses); valores faltantes cuentan como 0.                                |
 | `added_<product>`      | int  | computed | 1 si el cliente adquirió el producto **este** mes (no lo tenía en `t-1`, lo tiene en `t`), 0 si no. Null si no hay fila en `t-1`. Feature segura. |
 | `label_next_<product>` | int  | computed | **Etiqueta.** 1 si el cliente lo adquiere en `t+1` (no lo tiene en `t`, lo tiene en `t+1`), 0 si no. Null si el cliente no tiene fila en `t+1`.   |
 
@@ -174,30 +173,30 @@ Los 24 productos y sus nombres de columna (cada uno tiene también `added_<produ
 
 | Producto                 | Tenencia (raw)      | Lags (computed)                            | Etiqueta (computed)            |
 | ------------------------ | ------------------- | ------------------------------------------ | ------------------------------ |
-| Cuenta de ahorros        | `ind_ahor_fin_ult1` | `ind_ahor_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ahor_fin_ult1` |
-| Garantías                | `ind_aval_fin_ult1` | `ind_aval_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_aval_fin_ult1` |
-| Cuenta corriente         | `ind_cco_fin_ult1`  | `ind_cco_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_cco_fin_ult1`  |
-| Cuenta de derivados      | `ind_cder_fin_ult1` | `ind_cder_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_cder_fin_ult1` |
-| Cuenta de nómina         | `ind_cno_fin_ult1`  | `ind_cno_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_cno_fin_ult1`  |
-| Cuenta junior            | `ind_ctju_fin_ult1` | `ind_ctju_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctju_fin_ult1` |
-| Cuenta "Más particular"  | `ind_ctma_fin_ult1` | `ind_ctma_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctma_fin_ult1` |
-| Cuenta "Particular"      | `ind_ctop_fin_ult1` | `ind_ctop_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctop_fin_ult1` |
-| Cuenta "Particular Plus" | `ind_ctpp_fin_ult1` | `ind_ctpp_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ctpp_fin_ult1` |
-| Depósito corto plazo     | `ind_deco_fin_ult1` | `ind_deco_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_deco_fin_ult1` |
-| Depósito mediano plazo   | `ind_deme_fin_ult1` | `ind_deme_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_deme_fin_ult1` |
-| Depósito largo plazo     | `ind_dela_fin_ult1` | `ind_dela_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_dela_fin_ult1` |
-| Cuenta electrónica       | `ind_ecue_fin_ult1` | `ind_ecue_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_ecue_fin_ult1` |
-| Fondos                   | `ind_fond_fin_ult1` | `ind_fond_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_fond_fin_ult1` |
-| Hipoteca                 | `ind_hip_fin_ult1`  | `ind_hip_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_hip_fin_ult1`  |
-| Plan de pensiones        | `ind_plan_fin_ult1` | `ind_plan_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_plan_fin_ult1` |
-| Préstamos                | `ind_pres_fin_ult1` | `ind_pres_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_pres_fin_ult1` |
-| Impuestos                | `ind_reca_fin_ult1` | `ind_reca_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_reca_fin_ult1` |
-| Tarjeta de crédito       | `ind_tjcr_fin_ult1` | `ind_tjcr_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_tjcr_fin_ult1` |
-| Valores                  | `ind_valo_fin_ult1` | `ind_valo_fin_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_valo_fin_ult1` |
-| Cuenta vivienda          | `ind_viv_fin_ult1`  | `ind_viv_fin_ult1_lag1`, `_lag3`, `_lag6`  | `label_next_ind_viv_fin_ult1`  |
-| Nómina                   | `ind_nomina_ult1`   | `ind_nomina_ult1_lag1`, `_lag3`, `_lag6`   | `label_next_ind_nomina_ult1`   |
-| Pensiones                | `ind_nom_pens_ult1` | `ind_nom_pens_ult1_lag1`, `_lag3`, `_lag6` | `label_next_ind_nom_pens_ult1` |
-| Débito directo           | `ind_recibo_ult1`   | `ind_recibo_ult1_lag1`, `_lag3`, `_lag6`   | `label_next_ind_recibo_ult1`   |
+| Cuenta de ahorros        | `ind_ahor_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_ahor_fin_ult1` |
+| Garantías                | `ind_aval_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_aval_fin_ult1` |
+| Cuenta corriente         | `ind_cco_fin_ult1`  | `*_lag1` a `*_lag6`  | `label_next_ind_cco_fin_ult1`  |
+| Cuenta de derivados      | `ind_cder_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_cder_fin_ult1` |
+| Cuenta de nómina         | `ind_cno_fin_ult1`  | `*_lag1` a `*_lag6`  | `label_next_ind_cno_fin_ult1`  |
+| Cuenta junior            | `ind_ctju_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_ctju_fin_ult1` |
+| Cuenta "Más particular"  | `ind_ctma_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_ctma_fin_ult1` |
+| Cuenta "Particular"      | `ind_ctop_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_ctop_fin_ult1` |
+| Cuenta "Particular Plus" | `ind_ctpp_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_ctpp_fin_ult1` |
+| Depósito corto plazo     | `ind_deco_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_deco_fin_ult1` |
+| Depósito mediano plazo   | `ind_deme_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_deme_fin_ult1` |
+| Depósito largo plazo     | `ind_dela_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_dela_fin_ult1` |
+| Cuenta electrónica       | `ind_ecue_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_ecue_fin_ult1` |
+| Fondos                   | `ind_fond_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_fond_fin_ult1` |
+| Hipoteca                 | `ind_hip_fin_ult1`  | `*_lag1` a `*_lag6`  | `label_next_ind_hip_fin_ult1`  |
+| Plan de pensiones        | `ind_plan_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_plan_fin_ult1` |
+| Préstamos                | `ind_pres_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_pres_fin_ult1` |
+| Impuestos                | `ind_reca_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_reca_fin_ult1` |
+| Tarjeta de crédito       | `ind_tjcr_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_tjcr_fin_ult1` |
+| Valores                  | `ind_valo_fin_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_valo_fin_ult1` |
+| Cuenta vivienda          | `ind_viv_fin_ult1`  | `*_lag1` a `*_lag6`  | `label_next_ind_viv_fin_ult1`  |
+| Nómina                   | `ind_nomina_ult1`   | `*_lag1` a `*_lag6`   | `label_next_ind_nomina_ult1`   |
+| Pensiones                | `ind_nom_pens_ult1` | `*_lag1` a `*_lag6` | `label_next_ind_nom_pens_ult1` |
+| Débito directo           | `ind_recibo_ult1`   | `*_lag1` a `*_lag6`   | `label_next_ind_recibo_ult1`   |
 
 ### Columnas de conteo
 
@@ -209,8 +208,9 @@ Los 24 productos y sus nombres de columna (cada uno tiene también `added_<produ
 | `has_previous_month` | int  | computed | 1 si el cliente tiene fila en `t-1`, 0 si no (cliente nuevo o mes saltado).                                                                                 |
 | `label_next_n_added` | int  | computed | **Etiqueta.** Número de productos adquiridos en `t+1`. Null si no tiene fila en `t+1`. Usa `label_next_n_added > 0` para elegir las filas de entrenamiento. |
 
-En total: 168 columnas más la partición `fecha_dato` (2 clave, 17 perfil, 24
-tenencias, 72 lags, 24 `added_`, 4 conteos, 24 `label_next_`, 1 `label_next_n_added`).
+En total: 288 columnas más la partición `fecha_dato` (2 clave, 17 perfil, 24
+tenencias, 144 lags, 48 resúmenes de historial, 24 `added_`, 4 conteos,
+24 `label_next_`, 1 `label_next_n_added`).
 
 ### Columnas de silver que quedaron fuera
 

@@ -58,7 +58,8 @@ PROFILE_COLUMNS: tuple[str, ...] = (
     "renta",
     "segmento",
 )
-LAGS: tuple[int, ...] = (1, 3, 6)
+LAGS: tuple[int, ...] = (1, 2, 3, 4, 5, 6)
+HISTORY_WINDOWS: tuple[int, ...] = (3, 6)
 
 # The ``gold_train`` columns in schema order, ending with the partition key.
 # Single source of truth for the Athena adapter (column mapping and the sort
@@ -68,6 +69,7 @@ GOLD_TRAIN_COLUMN_NAMES: tuple[str, ...] = (
     + PROFILE_COLUMNS
     + PRODUCTS
     + tuple(f"{product}_lag{months}" for months in LAGS for product in PRODUCTS)
+    + tuple(f"{product}_history_count{months}m" for months in HISTORY_WINDOWS for product in PRODUCTS)
     + tuple(f"added_{product}" for product in PRODUCTS)
     + ("n_products", "n_products_added", "n_products_dropped", "has_previous_month")
     + tuple(f"label_next_{product}" for product in PRODUCTS)
@@ -143,7 +145,7 @@ class MonthPage:
 _ENTITY_FIELD_NAMES = {f.name for f in fields(ClientRecord)}
 assert "ncodpers" in _ENTITY_FIELD_NAMES
 assert "fecha_dato" in _ENTITY_FIELD_NAMES
-assert len(GOLD_TRAIN_COLUMN_NAMES) == 169
+assert len(GOLD_TRAIN_COLUMN_NAMES) == 289
 
 
 # --- Analytical gold tables (partitioned by fecha_dato, no ncodpers grain) ---

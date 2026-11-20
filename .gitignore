@@ -70,3 +70,4 @@ Thumbs.db
 
 # Raw datasets (large; uploaded to S3 manually, not versioned)
 data/
+secrets.toml
