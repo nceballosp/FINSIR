@@ -34,6 +34,9 @@ ARCH_IMG = REPO / "documentation" / "architecture" / "aws_architecture_diagram.p
 BLUE = "#12305a"       # serie principal / modelo
 ORANGE = "#f2a93b"     # serie de comparación / modelo base
 GRAY = "#c3c2b7"       # contexto (emphasis: resaltar uno, gris el resto)
+SOFT = "#a9b8cc"       # barras de contexto cuando se resalta una en azul marino
+# Regla de color: naranja = modelo FINSIR (LightGBM); azul marino = dato destacado o
+# modelo base; SOFT/GRAY = contexto.
 INK = "#0b0b0b"
 INK_2 = "#52514e"
 MUTED = "#898781"
@@ -110,6 +113,12 @@ def mes(fecha) -> str:
     return f"{MESES[f.month - 1]} {f.year}"
 
 
+def mes_corto(fecha) -> str:
+    """Mes en formato numérico corto (04/15) para que 17 meses quepan horizontales."""
+    f = pd.Timestamp(fecha)
+    return f"{f.month:02d}/{f.year % 100:02d}"
+
+
 def pct(x: float, d: int = 1) -> str:
     """Porcentaje en formato es-CO; espacio no separable para que '%' no se parta de línea."""
     return f"{x * 100:,.{d}f} %".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -128,19 +137,19 @@ def style(fig: go.Figure, height: int = 380, legend: bool = False) -> go.Figure:
     fig.update_layout(
         height=height, margin=dict(l=8, r=8, t=72 if legend else 40, b=8),
         paper_bgcolor=SURFACE, plot_bgcolor=SURFACE, separators=",.",
-        font=dict(family=FONT, size=13, color=INK_2),
+        font=dict(family=FONT, size=13, color=INK),
         title=dict(font=dict(size=15, color=INK), y=0.985, yanchor="top", yref="container",
                    x=0.01, xanchor="left"),
         hoverlabel=dict(bgcolor="white", font_size=13,
                         font_family=FONT, bordercolor=GRID),
         showlegend=legend,
         legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0,
-                    font=dict(color=INK_2)),
+                    font=dict(color=INK)),
     )
     fig.update_xaxes(gridcolor=GRID, linecolor=GRAY, zerolinecolor=GRAY,
-                     tickfont=dict(color=MUTED))
+                     tickfont=dict(color=INK), title_font=dict(color=INK))
     fig.update_yaxes(gridcolor=GRID, linecolor=GRAY, zerolinecolor=GRAY,
-                     tickfont=dict(color=MUTED))
+                     tickfont=dict(color=INK), title_font=dict(color=INK))
     return fig
 
 
@@ -330,29 +339,31 @@ if sec == SECCIONES[0]:
 
     st.subheader("Comprar algo nuevo es un evento raro")
     avg_buy = RES.pct_compran.mean()
-    left, right = st.columns([3, 2])
+    left, right = st.columns([3, 1], gap="medium")  # gráfica ancha, texto angosto
     with left:
         r = RES.dropna(subset=["pct_compran"])
         fig = go.Figure(go.Scatter(
-            x=r.fecha.map(mes), y=r.pct_compran, mode="lines+markers",
+            x=r.fecha.map(mes_corto), y=r.pct_compran, mode="lines+markers",
+            text=r.fecha.map(mes),
             line=dict(color=BLUE, width=2), marker=dict(size=8, color=BLUE),
             customdata=r[["clients_with_adds", "clients_with_prev"]],
-            hovertemplate="%{x}<br><b>%{y:.2%}</b> de los clientes adquirió algo"
+            hovertemplate="%{text}<br><b>%{y:.2%}</b> de los clientes adquirió algo"
                           "<br>%{customdata[0]:,} de %{customdata[1]:,}<extra></extra>"))
-        months_x = r.fecha.map(mes)
+        months_x = r.fecha.map(mes_corto)
         fig.add_trace(go.Scatter(
             x=months_x,
             y=[avg_buy] * len(months_x),
             mode="lines",  # Solo dibuja la línea, sin puntos visibles
             name="Promedio",
-            line=dict(color=ORANGE, width=1.5, dash="dash"),
+            line=dict(color=MUTED, width=1.5, dash="dash"),
             hovertemplate=f"Promedio: {pct(avg_buy, 2)}<extra></extra>",
-            hoverlabel=dict(bgcolor=ORANGE, font_color="white")
+            hoverlabel=dict(bgcolor=MUTED, font_color="white")
         ))
         fig.update_yaxes(tickformat=".1%", rangemode="tozero", title=None)
+        fig.update_xaxes(tickangle=0, tickfont=dict(size=12))
         fig.update_layout(
             title="% de clientes que adquiere al menos un producto nuevo en el mes")
-        chart(style(fig, 340), "buyers")
+        chart(style(fig, 380), "buyers")
     with right:
         st.markdown(
             f'<div class="big">{pct(avg_buy, 1)}</div>', unsafe_allow_html=True)
@@ -373,7 +384,7 @@ elif sec == SECCIONES[1]:
     st.title("Los clientes son muy distintos: no sirve una oferta única")
     k = KPI_LAST.sort_values("penetration_rate")
     top = k.iloc[-1]
-    colors_pen = [ORANGE if name == top.nombre else BLUE for name in k.nombre]
+    colors_pen = [BLUE if name == top.nombre else SOFT for name in k.nombre]
 
     left, right = st.columns([4, 1])
 
@@ -387,7 +398,9 @@ elif sec == SECCIONES[1]:
         fig.update_xaxes(tickformat=".0%", title=None)
         fig.update_layout(
             title="Penetración: % de clientes que tiene cada producto", bargap=0.25)
-        chart(style(fig, 620), "pen")
+        style(fig, 620)
+        fig.update_yaxes(tickfont=dict(color=INK, size=13))  # nombres de producto legibles
+        chart(fig, "pen")
 
         prof = D["perfil_clientes"].copy()
         prof["Segmento"] = prof.segmento.map(
@@ -408,8 +421,8 @@ elif sec == SECCIONES[1]:
             ages = D["edades"]
             if seg == "Todos":
                 max_age = ages.clients.idxmax()
-                age_colors = [ORANGE if idx ==
-                              max_age else BLUE for idx in ages.index]
+                age_colors = [BLUE if idx ==
+                              max_age else SOFT for idx in ages.index]
                 fig = go.Figure(go.Bar(x=ages.age, y=ages.clients, marker_color=age_colors,
                                        hovertemplate="%{x} años: %{y:,} clientes<extra></extra>"))
                 fig.update_layout(title="Clientes por edad", bargap=0.05)
@@ -417,8 +430,8 @@ elif sec == SECCIONES[1]:
             else:
                 a = p.groupby("age_band", as_index=False).clients.sum(
                 ).sort_values("age_band")
-                age_colors = [ORANGE if idx ==
-                              a.clients.idxmax() else BLUE for idx in a.index]
+                age_colors = [BLUE if idx ==
+                              a.clients.idxmax() else SOFT for idx in a.index]
                 fig = go.Figure(go.Bar(x=a.age_band, y=a.clients, marker=dict(color=age_colors, cornerradius=4),
                                        hovertemplate="%{x}: %{y:,} clientes<extra></extra>"))
                 fig.update_layout(title=f"Clientes por rango de edad · {seg}")
@@ -428,8 +441,8 @@ elif sec == SECCIONES[1]:
             ).sort_values("income_band")
             a["income_band"] = a.income_band.replace(
                 {"desconocido": "Sin dato"})
-            income_colors = [ORANGE if idx ==
-                             a.clients.idxmax() else BLUE for idx in a.index]
+            income_colors = [BLUE if idx ==
+                             a.clients.idxmax() else SOFT for idx in a.index]
             fig = go.Figure(go.Bar(x=a.income_band, y=a.clients / a.clients.sum(),
                                    marker=dict(color=income_colors,
                                                cornerradius=4),
@@ -437,24 +450,27 @@ elif sec == SECCIONES[1]:
             fig.update_yaxes(tickformat=".0%")
             fig.update_layout(title="Renta bruta del hogar (EUR/año)")
             chart(style(fig, 300), "renta")
-            st.caption(f"Renta sin dato: {pct(Q['pct_renta_nula'], 0)}.")
+            sin_dato = a.loc[a.income_band == "Sin dato", "clients"].sum() / a.clients.sum()
+            st.caption(f"Renta sin dato: {pct(sin_dato, 0)} de los clientes en {mes(LAST)}; "
+                       "no se imputa.")
         with tabs[2]:
             a = prof.groupby("Segmento", as_index=False).agg(clients=("clients", "sum"),
                                                              prods=("sum_products", "sum"))
             a["avg"] = a.prods / a.clients
-            segment_colors = [ORANGE if idx ==
-                              a.clients.idxmax() else BLUE for idx in a.index]
+            destacado = a.clients.idxmax() if seg == "Todos" else a.index[a.Segmento == seg][0]
+            segment_colors = [BLUE if idx == destacado else SOFT for idx in a.index]
             fig = go.Figure(go.Bar(x=a.Segmento, y=a.clients, marker=dict(color=segment_colors, cornerradius=4),
                                    customdata=a[["avg"]],
                                    hovertemplate="%{x}: %{y:,} clientes<br>%{customdata[0]:.2f} "
                                    "productos promedio<extra></extra>"))
             fig.update_layout(
-                title="Clientes por segmento (todos los segmentos)")
+                title="Clientes por segmento" if seg == "Todos"
+                else f"Clientes por segmento · {seg} resaltado")
             chart(style(fig, 300), "segm")
         with tabs[3]:
             a = p.groupby("actividad", as_index=False).clients.sum()
-            activity_colors = [ORANGE if idx ==
-                               a.clients.idxmax() else BLUE for idx in a.index]
+            activity_colors = [BLUE if idx ==
+                               a.clients.idxmax() else SOFT for idx in a.index]
             fig = go.Figure(go.Bar(x=a.actividad.str.capitalize(), y=a.clients / a.clients.sum(),
                                    marker=dict(color=activity_colors,
                                                cornerradius=4),
@@ -515,13 +531,13 @@ elif sec == SECCIONES[2]:
                   "Inferencia (sin respuesta)": GRAY}
         fig = go.Figure()
         for role, color in colors.items():
-            xs = [mes(f) for f, rr in zip(months, roles) if rr == role]
+            xs = [mes_corto(f) for f, rr in zip(months, roles) if rr == role]
             fig.add_trace(go.Bar(x=xs, y=[1] * len(xs), name=role,
                                  marker=dict(color=color, cornerradius=4),
                                  hovertemplate="%{x}: " + role + "<extra></extra>"))
         fig.update_yaxes(visible=False)
-        fig.update_xaxes(categoryorder="array", categoryarray=[mes(f) for f in months],
-                         tickangle=-45, showgrid=False)
+        fig.update_xaxes(categoryorder="array", categoryarray=[mes_corto(f) for f in months],
+                         tickangle=0, showgrid=False, tickfont=dict(size=11))
         fig.update_layout(title="Corte temporal: cada mes predice las compras del mes siguiente",
                           bargap=0.15)
         chart(style(fig, 230, legend=True), "split")
@@ -553,7 +569,7 @@ elif sec == SECCIONES[3]:
         fig = go.Figure(go.Bar(
             x=v.map7, y=v.modelo, orientation="h", marker=dict(color=colors, cornerradius=4),
             text=[f"{x:.4f}".replace(".", ",") for x in v.map7], textposition="outside",
-            textfont=dict(color=INK_2),
+            textfont=dict(color=INK),
             hovertemplate="<b>%{y}</b><br>MAP@7 = %{x:.4f}<extra></extra>"))
         fig.update_xaxes(range=[0, v.map7.max() * 1.25], title=None)
         fig.update_layout(title=f"Validación ({mes(cuts['validacion'])}): MAP@7 por modelo",
@@ -595,8 +611,7 @@ elif sec == SECCIONES[3]:
         model_plot = e.sort_values("score", ascending=False).copy()
         model_plot["puesto"] = range(1, len(model_plot) + 1)
         model_plot["prioridad"] = len(model_plot) + 1 - model_plot["puesto"]
-        colors_model = [ORANGE if rank ==
-                        1 else BLUE for rank in model_plot.puesto]
+        colors_model = [ORANGE] * len(model_plot)
         fig = go.Figure(go.Bar(
             x=model_plot.prioridad, y=model_plot["product"].map(pname), orientation="h",
             marker=dict(color=colors_model, cornerradius=4),
@@ -615,8 +630,7 @@ elif sec == SECCIONES[3]:
                                       "puesto": range(1, len(baseline_products) + 1)})
         baseline_plot["prioridad"] = len(
             baseline_plot) + 1 - baseline_plot["puesto"]
-        colors_base = [ORANGE if rank ==
-                       1 else BLUE for rank in baseline_plot.puesto]
+        colors_base = [BLUE] * len(baseline_plot)
         fig = go.Figure(go.Bar(
             x=baseline_plot.prioridad, y=baseline_plot["product"].map(pname), orientation="h",
             marker=dict(color=colors_base, cornerradius=4), customdata=baseline_plot.puesto,
