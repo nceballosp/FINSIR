@@ -374,89 +374,95 @@ elif sec == SECCIONES[1]:
     k = KPI_LAST.sort_values("penetration_rate")
     top = k.iloc[-1]
     colors_pen = [ORANGE if name == top.nombre else BLUE for name in k.nombre]
-    fig = go.Figure(go.Bar(
-        x=k.penetration_rate, y=k.nombre, orientation="h",
-        marker=dict(color=colors_pen, cornerradius=4),
-        customdata=k[["holders"]],
-        hovertemplate="<b>%{y}</b><br>%{x:.2%} de los clientes<br>%{customdata[0]:,} "
-        "titulares<extra></extra>"))
-    fig.update_xaxes(tickformat=".0%", title=None)
-    fig.update_layout(
-        title="Penetración: % de clientes que tiene cada producto", bargap=0.25)
-    chart(style(fig, 620), "pen")
 
-    prof = D["perfil_clientes"].copy()
-    prof["Segmento"] = prof.segmento.map(
-        SEGMENT_LABELS).fillna(prof.segmento)
-    seg_opts = ["Todos"] + [s for s in ["VIP", "Particulares", "Universitario"]
-                            if s in set(prof.Segmento)]
-    seg = st.segmented_control("Filtrar perfil por segmento", seg_opts, default="Todos",
-                               key="seg_perfil") if hasattr(st, "segmented_control") else \
-        st.radio("Filtrar perfil por segmento", seg_opts, horizontal=True)
-    seg = seg or "Todos"
-    p = prof if seg == "Todos" else prof[prof.Segmento == seg]
-    tabs = st.tabs(["Edad", "Renta", "Segmento", "Actividad"])
-    with tabs[0]:
-        ages = D["edades"]
-        if seg == "Todos":
-            max_age = ages.clients.idxmax()
-            age_colors = [ORANGE if idx ==
-                          max_age else BLUE for idx in ages.index]
-            fig = go.Figure(go.Bar(x=ages.age, y=ages.clients, marker_color=age_colors,
-                                   hovertemplate="%{x} años: %{y:,} clientes<extra></extra>"))
-            fig.update_layout(title="Clientes por edad", bargap=0.05)
-            fig.update_xaxes(range=[0, 100], title=None)
-        else:
-            a = p.groupby("age_band", as_index=False).clients.sum(
-            ).sort_values("age_band")
-            age_colors = [ORANGE if idx ==
-                          a.clients.idxmax() else BLUE for idx in a.index]
-            fig = go.Figure(go.Bar(x=a.age_band, y=a.clients, marker=dict(color=age_colors, cornerradius=4),
-                                   hovertemplate="%{x}: %{y:,} clientes<extra></extra>"))
-            fig.update_layout(title=f"Clientes por rango de edad · {seg}")
-        chart(style(fig, 300), "ages")
-        st.caption("Picos: 21–25 y 40–50 años.")
-    with tabs[1]:
-        a = p.groupby("income_band", as_index=False).clients.sum(
-        ).sort_values("income_band")
-        a["income_band"] = a.income_band.replace(
-            {"desconocido": "Sin dato"})
-        income_colors = [ORANGE if idx ==
-                         a.clients.idxmax() else BLUE for idx in a.index]
-        fig = go.Figure(go.Bar(x=a.income_band, y=a.clients / a.clients.sum(),
-                               marker=dict(color=income_colors,
-                                           cornerradius=4),
-                               hovertemplate="%{x}: %{y:.1%}<extra></extra>"))
-        fig.update_yaxes(tickformat=".0%")
-        fig.update_layout(title="Renta bruta del hogar (EUR/año)")
-        chart(style(fig, 300), "renta")
-        st.caption(f"Renta sin dato: {pct(Q['pct_renta_nula'], 0)}.")
-    with tabs[2]:
-        a = prof.groupby("Segmento", as_index=False).agg(clients=("clients", "sum"),
-                                                         prods=("sum_products", "sum"))
-        a["avg"] = a.prods / a.clients
-        segment_colors = [ORANGE if idx ==
-                          a.clients.idxmax() else BLUE for idx in a.index]
-        fig = go.Figure(go.Bar(x=a.Segmento, y=a.clients, marker=dict(color=segment_colors, cornerradius=4),
-                               customdata=a[["avg"]],
-                               hovertemplate="%{x}: %{y:,} clientes<br>%{customdata[0]:.2f} "
-                               "productos promedio<extra></extra>"))
+    left, right = st.columns([4, 1])
+
+    with left:
+        fig = go.Figure(go.Bar(
+            x=k.penetration_rate, y=k.nombre, orientation="h",
+            marker=dict(color=colors_pen, cornerradius=4),
+            customdata=k[["holders"]],
+            hovertemplate="<b>%{y}</b><br>%{x:.2%} de los clientes<br>%{customdata[0]:,} "
+            "titulares<extra></extra>"))
+        fig.update_xaxes(tickformat=".0%", title=None)
         fig.update_layout(
-            title="Clientes por segmento (todos los segmentos)")
-        chart(style(fig, 300), "segm")
-    with tabs[3]:
-        a = p.groupby("actividad", as_index=False).clients.sum()
-        activity_colors = [ORANGE if idx ==
-                           a.clients.idxmax() else BLUE for idx in a.index]
-        fig = go.Figure(go.Bar(x=a.actividad.str.capitalize(), y=a.clients / a.clients.sum(),
-                               marker=dict(color=activity_colors,
-                                           cornerradius=4),
-                               hovertemplate="%{x}: %{y:.1%}<extra></extra>"))
-        fig.update_yaxes(tickformat=".0%")
-        fig.update_layout(title="Clientes activos vs. inactivos")
-        chart(style(fig, 300), "activ")
-    nav_buttons("s2")
+            title="Penetración: % de clientes que tiene cada producto", bargap=0.25)
+        chart(style(fig, 620), "pen")
 
+        prof = D["perfil_clientes"].copy()
+        prof["Segmento"] = prof.segmento.map(
+            SEGMENT_LABELS).fillna(prof.segmento)
+        seg_opts = ["Todos"] + [s for s in ["VIP", "Particulares", "Universitario"]
+                                if s in set(prof.Segmento)]
+
+        st.subheader("Filtrar perfil por segmento")
+
+        seg = st.segmented_control("", seg_opts, default="Todos",
+                                   key="seg_perfil", label_visibility="collapsed") if hasattr(st, "segmented_control") else \
+            st.radio("", seg_opts, horizontal=True,
+                     label_visibility="collapsed")
+        seg = seg or "Todos"
+        p = prof if seg == "Todos" else prof[prof.Segmento == seg]
+        tabs = st.tabs(["Edad", "Renta", "Segmento", "Actividad"])
+        with tabs[0]:
+            ages = D["edades"]
+            if seg == "Todos":
+                max_age = ages.clients.idxmax()
+                age_colors = [ORANGE if idx ==
+                              max_age else BLUE for idx in ages.index]
+                fig = go.Figure(go.Bar(x=ages.age, y=ages.clients, marker_color=age_colors,
+                                       hovertemplate="%{x} años: %{y:,} clientes<extra></extra>"))
+                fig.update_layout(title="Clientes por edad", bargap=0.05)
+                fig.update_xaxes(range=[0, 100], title=None)
+            else:
+                a = p.groupby("age_band", as_index=False).clients.sum(
+                ).sort_values("age_band")
+                age_colors = [ORANGE if idx ==
+                              a.clients.idxmax() else BLUE for idx in a.index]
+                fig = go.Figure(go.Bar(x=a.age_band, y=a.clients, marker=dict(color=age_colors, cornerradius=4),
+                                       hovertemplate="%{x}: %{y:,} clientes<extra></extra>"))
+                fig.update_layout(title=f"Clientes por rango de edad · {seg}")
+            chart(style(fig, 300), "ages")
+        with tabs[1]:
+            a = p.groupby("income_band", as_index=False).clients.sum(
+            ).sort_values("income_band")
+            a["income_band"] = a.income_band.replace(
+                {"desconocido": "Sin dato"})
+            income_colors = [ORANGE if idx ==
+                             a.clients.idxmax() else BLUE for idx in a.index]
+            fig = go.Figure(go.Bar(x=a.income_band, y=a.clients / a.clients.sum(),
+                                   marker=dict(color=income_colors,
+                                               cornerradius=4),
+                                   hovertemplate="%{x}: %{y:.1%}<extra></extra>"))
+            fig.update_yaxes(tickformat=".0%")
+            fig.update_layout(title="Renta bruta del hogar (EUR/año)")
+            chart(style(fig, 300), "renta")
+            st.caption(f"Renta sin dato: {pct(Q['pct_renta_nula'], 0)}.")
+        with tabs[2]:
+            a = prof.groupby("Segmento", as_index=False).agg(clients=("clients", "sum"),
+                                                             prods=("sum_products", "sum"))
+            a["avg"] = a.prods / a.clients
+            segment_colors = [ORANGE if idx ==
+                              a.clients.idxmax() else BLUE for idx in a.index]
+            fig = go.Figure(go.Bar(x=a.Segmento, y=a.clients, marker=dict(color=segment_colors, cornerradius=4),
+                                   customdata=a[["avg"]],
+                                   hovertemplate="%{x}: %{y:,} clientes<br>%{customdata[0]:.2f} "
+                                   "productos promedio<extra></extra>"))
+            fig.update_layout(
+                title="Clientes por segmento (todos los segmentos)")
+            chart(style(fig, 300), "segm")
+        with tabs[3]:
+            a = p.groupby("actividad", as_index=False).clients.sum()
+            activity_colors = [ORANGE if idx ==
+                               a.clients.idxmax() else BLUE for idx in a.index]
+            fig = go.Figure(go.Bar(x=a.actividad.str.capitalize(), y=a.clients / a.clients.sum(),
+                                   marker=dict(color=activity_colors,
+                                               cornerradius=4),
+                                   hovertemplate="%{x}: %{y:.1%}<extra></extra>"))
+            fig.update_yaxes(tickformat=".0%")
+            fig.update_layout(title="Clientes activos vs. inactivos")
+            chart(style(fig, 300), "activ")
+    nav_buttons("s2")
 
 elif sec == SECCIONES[2]:
     st.title("¿Cómo lo construimos?")
@@ -505,7 +511,7 @@ elif sec == SECCIONES[2]:
                 roles.append("Prueba")
             else:
                 roles.append("Inferencia (sin respuesta)")
-        colors = {"Entrenamiento": BLUE, "Validación": "#3d76bc", "Prueba": ORANGE,
+        colors = {"Entrenamiento": BLUE, "Validación": "#2a78d6", "Prueba": ORANGE,
                   "Inferencia (sin respuesta)": GRAY}
         fig = go.Figure()
         for role, color in colors.items():
@@ -530,14 +536,14 @@ elif sec == SECCIONES[2]:
 # 4 · RESULTADOS
 # ===========================================================================
 elif sec == SECCIONES[3]:
-    # st.markdown('<p class="kicker">Evaluación</p>', unsafe_allow_html=True)
-    st.title("¿Funcionó?")
+    st.title("Conclusiones")
+
     test = {r["modelo"]: r for r in M["prueba"]}
     lgb_t, base_t = test["LightGBM"], test["Popularidad (base)"]
     lift = lgb_t["map7"] / base_t["map7"] - 1
     cuts = M["cortes_temporales"]
 
-    l, r = st.columns([2, 3])
+    l, r = st.columns([3, 2])
     with l:
         v = pd.DataFrame(M["comparacion_validacion"]).sort_values("map7")
         colors = [
@@ -551,28 +557,23 @@ elif sec == SECCIONES[3]:
         fig.update_layout(title=f"Validación ({mes(cuts['validacion'])}): MAP@7 por modelo",
                           bargap=0.45)
         chart(style(fig, 300), "val")
-
-    st.subheader("¿Para quién funciona mejor?")
-    seg = pd.DataFrame(M["por_segmento"])
-    dsel = st.segmented_control("Ver por", seg.dimension.unique().tolist(), default="Segmento",
-                                key="segdim") if hasattr(st, "segmented_control") else \
-        st.radio("Ver por", seg.dimension.unique().tolist(),
-                 horizontal=True, index=2)
-    s = seg[seg.dimension == (dsel or "Segmento")]
-    segment_result_colors = [ORANGE if idx ==
-                             s.map7.idxmax() else BLUE for idx in s.index]
-    fig = go.Figure(go.Bar(x=s.valor, y=s.map7, marker=dict(color=segment_result_colors, cornerradius=4),
-                           customdata=s[["clientes", "hit_rate"]],
-                           hovertemplate="<b>%{x}</b><br>MAP@7 = %{y:.4f}<br>%{customdata[0]:,} "
-                                         "clientes<br>acierto ≥1 en top 7: %{customdata[1]:.1%}"
-                                         "<extra></extra>"))
-    fig.add_hline(y=lgb_t["map7"], line=dict(color=MUTED, width=1),
-                  annotation_text="promedio LightGBM", annotation_font_color=INK_2)
-    fig.update_layout(title=f"MAP@7 de LightGBM en prueba por {(dsel or 'Segmento').lower()}",
-                      bargap=0.5)
-    chart(style(fig, 320), "seg")
-    st.caption(
-        "Mayor acierto: VIP y 35–54 años. Menor: universitarios y menores de 25.")
+    with r:
+        validacion = {row["modelo"]: row["map7"]
+                      for row in M["comparacion_validacion"]}
+        map_base = validacion["Popularidad (base)"]
+        map_lightgbm = validacion["LightGBM"]
+        mejora_validacion = map_lightgbm / map_base - 1
+        escala = max(map_base, map_lightgbm)
+        ancho_base = map_base / escala * 100
+        ancho_lgb = map_lightgbm / escala * 100
+        mejora_txt = f"{mejora_validacion * 100:.1f}".replace(".", ",")
+        st.markdown(
+            f'''
+              <div style="color:#176b39;font-size:3rem;font-weight:750;line-height:1.15;margin:5px 0">
+                ↑ {mejora_txt}%</div>
+              <div style="color:#52514e;font-size:.9rem;margin-bottom:14px">LightGBM frente al baseline</div>
+              ''',
+            unsafe_allow_html=True)
 
     st.subheader("Recomendaciones para un cliente")
 
@@ -627,6 +628,4 @@ elif sec == SECCIONES[3]:
         chart(style(fig, 340), "example_baseline")
         test_metrics = {r["modelo"]: r for r in M["prueba"]}
         baseline_map7 = test_metrics["Popularidad (base)"]["map7"]
-        st.caption(
-            f"MAP@7 del baseline en prueba: {baseline_map7:.4f} · ranking global, sin personalizar.")
     nav_buttons("s4")
