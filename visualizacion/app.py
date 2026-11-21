@@ -447,7 +447,7 @@ elif sec == SECCIONES[1]:
                                    marker=dict(color=income_colors,
                                                cornerradius=4),
                                    hovertemplate="%{x}: %{y:.1%}<extra></extra>"))
-            fig.update_yaxes(tickformat=".0%")
+            fig.update_yaxes(tickformat=".0%", dtick=0.05)  # mismo paso (5 %) en todos los segmentos
             fig.update_layout(title="Renta bruta del hogar (EUR/año)")
             chart(style(fig, 300), "renta")
             sin_dato = a.loc[a.income_band == "Sin dato", "clients"].sum() / a.clients.sum()
