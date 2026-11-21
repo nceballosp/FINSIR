@@ -6,7 +6,7 @@ con IP pública y sin balanceador de carga.
 > ¿Solo quieres desplegar o derribar rápido? Usa los scripts interactivos
 > (`iac/api/deploy.sh` para desplegar, `iac/destroy.sh` para derribar). El paso a
 > paso de abajo es para entender qué ocurre. Deploy y destroy simples:
-> [README de la raíz](../../../README.md#deploy-rápido-con-los-scripts).
+> [README de la raíz](../../../README.md#desplegar-en-aws).
 
 ## Qué crea
 

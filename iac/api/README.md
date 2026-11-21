@@ -13,7 +13,7 @@ valida dentro de FastAPI (no hay API Gateway). Las columnas están documentadas 
 > ¿Solo quieres desplegar rápido? Hay un script interactivo
 > (`deploy.sh` / `deploy.ps1`) que construye la imagen, la sube a ECR y aplica
 > Terraform por ti. El detalle de abajo es para entender qué ocurre. Deploy y
-> destroy simples: [README de la raíz](../../README.md#deploy-rápido-con-los-scripts).
+> destroy simples: [README de la raíz](../../README.md#desplegar-en-aws).
 
 ## Cómo está organizado el código (hexagonal)
 
@@ -142,7 +142,7 @@ Preparación resumida de ese CSV para el endpoint:
    mismo cliente para rescatar los campos permitidos.
 3. Ejecuta `finsir-gold-train` con `--SILVER silver/test_ver2_source/` y
    `--GOLD gold/test_ver2/`.
-5. Lee unas filas del Parquet en `gold/test_ver2/` y envíalas en lotes de hasta
+4. Lee unas filas del Parquet en `gold/test_ver2/` y envíalas en lotes de hasta
    100 al endpoint `POST /v1/recommendations/batch`.
 
 Para enviar una muestra desde tu máquina, instala las dependencias del
@@ -180,20 +180,20 @@ Token ausente/inválido → 401; scope equivocado → 403. El token nunca se log
 
 ## Variables de entorno
 
-| Variable                                                   | ¿Necesaria? | Para qué                                           |
-| ---------------------------------------------------------- | ----------- | -------------------------------------------------- |
-| `ATHENA_DATABASE`                                          | sí          | Base de datos de Glue (ej. `finsir`)               |
-| `ATHENA_WORKGROUP`                                         | sí          | Workgroup de Athena                                |
-| `ATHENA_OUTPUT`                                            | sí          | URI de S3 para resultados de Athena                |
-| `ATHENA_TABLE`                                             | no          | Tabla gold (default `gold_train`)                  |
+| Variable                                                   | ¿Necesaria? | Para qué                                               |
+| ---------------------------------------------------------- | ----------- | ------------------------------------------------------ |
+| `ATHENA_DATABASE`                                          | sí          | Base de datos de Glue (ej. `finsir`)                   |
+| `ATHENA_WORKGROUP`                                         | sí          | Workgroup de Athena                                    |
+| `ATHENA_OUTPUT`                                            | sí          | URI de S3 para resultados de Athena                    |
+| `ATHENA_TABLE`                                             | no          | Tabla gold (default `gold_train`)                      |
 | `MODEL_S3_URI`                                             | no          | Artefacto joblib multiclase en S3 para recomendaciones |
-| `ATHENA_ANALYTICS_TABLE_PREFIX`                            | no          | Prefijo de las tablas analíticas (default `gold_`) |
-| `AWS_REGION`                                               | no          | Región (default `us-east-1`)                       |
-| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod        | Validación de tokens RS256                         |
-| `AUTH_REQUIRED_SCOPE`                                      | no          | Scope requerido para rutas de datos                |
-| `IS_AUTH_DEV_MODE`                                         | no          | `true` activa el modo dev HS256                    |
-| `AUTH_DEV_SECRET`                                          | dev         | Secreto HS256 (modo dev)                           |
-| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no          | Metadata de logs                                   |
+| `ATHENA_ANALYTICS_TABLE_PREFIX`                            | no          | Prefijo de las tablas analíticas (default `gold_`)     |
+| `AWS_REGION`                                               | no          | Región (default `us-east-1`)                           |
+| `AUTH_ISSUER` / `AUTH_AUDIENCE` / `AUTH_JWKS_URL`          | prod        | Validación de tokens RS256                             |
+| `AUTH_REQUIRED_SCOPE`                                      | no          | Scope requerido para rutas de datos                    |
+| `IS_AUTH_DEV_MODE`                                         | no          | `true` activa el modo dev HS256                        |
+| `AUTH_DEV_SECRET`                                          | dev         | Secreto HS256 (modo dev)                               |
+| `SERVICE_NAME` / `SERVICE_VERSION` / `SERVICE_ENVIRONMENT` | no          | Metadata de logs                                       |
 
 El modo dev necesita `AUTH_DEV_SECRET`; prod necesita JWKS/audience/issuer. La
 app falla de inmediato si falta un valor requerido.

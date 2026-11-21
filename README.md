@@ -10,6 +10,7 @@ probable que un cliente adquiera el mes siguiente y devuelve un ranking Top-K
 (métrica: MAP@7).
 
 > Más contexto: [`context/context.md`](context/context.md).
+> Uso de IA en el proyecto: [`USO_DE_IA.md`](USO_DE_IA.md).
 
 ## Qué hay construido
 
@@ -167,6 +168,14 @@ export IS_AUTH_DEV_MODE=true AUTH_DEV_SECRET=dev-secret AUTH_REQUIRED_SCOPE=gold
 uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
+## App de Streamlit (demo)
+
+`.streamlit/app.py` es una interfaz mínima que consulta las recomendaciones del
+modelo por ID de cliente (`GET /v1/recommendations/clients/{ncodpers}`) contra la
+API desplegada. Necesita la API corriendo y un `.streamlit/secrets.toml` con
+`API_BASE_URL` y `AUTH_DEV_SECRET`. Paso a paso en
+[`.streamlit/README.md`](.streamlit/README.md).
+
 ## Tests
 
 ```bash
@@ -188,6 +197,7 @@ Cada carpeta tiene su README con el detalle técnico y el paso a paso manual:
 - API — [`iac/api/README.md`](iac/api/README.md)
 - API en ECS — [`iac/api/terraform-ecs/README.md`](iac/api/terraform-ecs/README.md)
 - Plataforma de datos — [`iac/data-platform/README.md`](iac/data-platform/README.md)
+- App de Streamlit — [`.streamlit/README.md`](.streamlit/README.md)
 
 ## APM (Agent Package Manager)
 

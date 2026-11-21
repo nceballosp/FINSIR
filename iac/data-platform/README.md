@@ -9,7 +9,7 @@ el catálogo de Glue.
 > ¿Solo quieres desplegar rápido? Hay un script interactivo
 > (`deploy.sh` / `deploy.ps1`) que hace todo esto por ti. El paso a paso manual
 > de abajo es para entender qué ocurre. Deploy y destroy simples:
-> [README de la raíz](../../README.md#deploy-rápido-con-los-scripts).
+> [README de la raíz](../../README.md#desplegar-en-aws).
 
 ## Qué crea
 
@@ -265,14 +265,14 @@ de decenas a pocos miles de filas. Cubren los tres módulos del tablero de la
 propuesta y las actividades 3, 5 y 6 (EDA, matriz de correlación, modelo base de
 popularidad y MAP@7).
 
-| Tabla                         | Grano (una fila por…)                                   | Para qué sirve en el dashboard                                     |
-| ----------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ |
-| `gold_product_monthly_kpis`   | mes × producto                                          | KPIs ejecutivos, tendencias, estacionalidad, ranking de popularidad |
-| `gold_customer_profile`       | mes × segmento × rango de edad × sexo × rango de renta  | Perfilamiento sociodemográfico (módulo exploratorio)               |
-| `gold_product_penetration`    | mes × dimensión × valor × producto                      | Mapas de calor de tenencia por segmento, edad, renta, provincia…   |
-| `gold_product_affinity`       | mes × producto A × producto B                           | Matriz de correlación de productos y venta cruzada (lift)          |
-| `gold_product_transitions`    | mes × producto que tenía × producto que adquirió        | Diagramas de Sankey (módulo de transición de productos)            |
-| `gold_baseline_popularity`    | mes                                                     | Modelo base de popularidad: ranking y su MAP@7 (módulo ejecutivo)  |
+| Tabla                       | Grano (una fila por…)                                  | Para qué sirve en el dashboard                                      |
+| --------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
+| `gold_product_monthly_kpis` | mes × producto                                         | KPIs ejecutivos, tendencias, estacionalidad, ranking de popularidad |
+| `gold_customer_profile`     | mes × segmento × rango de edad × sexo × rango de renta | Perfilamiento sociodemográfico (módulo exploratorio)                |
+| `gold_product_penetration`  | mes × dimensión × valor × producto                     | Mapas de calor de tenencia por segmento, edad, renta, provincia…    |
+| `gold_product_affinity`     | mes × producto A × producto B                          | Matriz de correlación de productos y venta cruzada (lift)           |
+| `gold_product_transitions`  | mes × producto que tenía × producto que adquirió       | Diagramas de Sankey (módulo de transición de productos)             |
+| `gold_baseline_popularity`  | mes                                                    | Modelo base de popularidad: ranking y su MAP@7 (módulo ejecutivo)   |
 
 Todas viven en `s3://<bucket>/gold/<tabla sin el prefijo gold_>/`, son Parquet
 particionado por `fecha_dato` (string `YYYY-MM-DD`) y las construye
@@ -392,14 +392,14 @@ LightGBM debe superar.
 
 ## Toggles
 
-| Variable                 | Default | Qué hace                                                                                       |
-| ------------------------ | ------- | ---------------------------------------------------------------------------------------------- |
-| `create_bucket`          | `true`  | Crear el bucket, o reutilizar uno (entonces `bucket_name` es obligatorio).                     |
-| `create_athena`          | `true`  | Crear la base de datos, el workgroup y las tablas.                                             |
-| `existing_glue_role_arn` | `""`    | Reutilizar un rol de Glue existente en vez de crear uno.                                       |
-| `partition_projection`   | `true`  | Autodescubrir las particiones `fecha_dato=...`.                                                |
-| `force_destroy_bucket`   | `false` | Permitir que `terraform destroy` borre un bucket no vacío. Déjalo en `false` con datos reales. |
-| `analytics_number_of_workers` | `5` | Workers de cada job gold analítico (son agregados livianos).                              |
+| Variable                      | Default | Qué hace                                                                                       |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| `create_bucket`               | `true`  | Crear el bucket, o reutilizar uno (entonces `bucket_name` es obligatorio).                     |
+| `create_athena`               | `true`  | Crear la base de datos, el workgroup y las tablas.                                             |
+| `existing_glue_role_arn`      | `""`    | Reutilizar un rol de Glue existente en vez de crear uno.                                       |
+| `partition_projection`        | `true`  | Autodescubrir las particiones `fecha_dato=...`.                                                |
+| `force_destroy_bucket`        | `false` | Permitir que `terraform destroy` borre un bucket no vacío. Déjalo en `false` con datos reales. |
+| `analytics_number_of_workers` | `5`     | Workers de cada job gold analítico (son agregados livianos).                                   |
 
 La carpeta de salida gold es `gold_prefix` (default `gold/train/`). Las tablas
 analíticas quedan en `analytics_root_prefix` + nombre (default
