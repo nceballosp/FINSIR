@@ -13,12 +13,6 @@ probable que un cliente adquiera el mes siguiente y devuelve un ranking Top-K
 
 FINSIR es un prototipo académico. Las recomendaciones reflejan patrones históricos y no representan ofertas financieras ni una estimación causal del efecto de una campaña.
 
-## Arquitectura
-
-![Diagrama general de arquitectura de FINSIR](documentation/architecture/aws_architecture_diagram.png)
-
-El CSV histórico se limpia con Glue y se transforma en S3 (capas bronze, silver y gold). Athena consulta las tablas gold; la API FastAPI en ECS sirve datos y recomendaciones, y el tablero Streamlit las presenta. Step Functions y EventBridge orquestan el procesamiento batch.
-
 ## Qué hay construido
 
 Tres componentes de backend, desplegables con Terraform sobre AWS (`us-east-1`, `aws ~> 5.80`,
