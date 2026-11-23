@@ -9,17 +9,25 @@ Product Recommendation_ (Kaggle), predice cuál de los 24 productos es más
 probable que un cliente adquiera el mes siguiente y devuelve un ranking Top-K
 (métrica: MAP@7).
 
-> Más contexto: [`context/context.md`](context/context.md).
 > Uso de IA en el proyecto: [`USO_DE_IA.md`](USO_DE_IA.md).
+
+FINSIR es un prototipo académico. Las recomendaciones reflejan patrones históricos y no representan ofertas financieras ni una estimación causal del efecto de una campaña.
+
+## Arquitectura
+
+![Diagrama general de arquitectura de FINSIR](documentation/architecture/aws_architecture_diagram.png)
+
+El CSV histórico se limpia con Glue y se transforma en S3 (capas bronze, silver y gold). Athena consulta las tablas gold; la API FastAPI en ECS sirve datos y recomendaciones, y el tablero Streamlit las presenta. Step Functions y EventBridge orquestan el procesamiento batch.
 
 ## Qué hay construido
 
-Dos piezas, ambas con Terraform sobre AWS (`us-east-1`, `aws ~> 5.80`,
+Tres componentes de backend, desplegables con Terraform sobre AWS (`us-east-1`, `aws ~> 5.80`,
 Terraform `>= 1.5`):
 
 | Pieza               | Carpeta              | Qué hace                                                                                                                 |
 | ------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Plataforma de datos | `iac/data-platform/` | Data lake en S3 + jobs de Glue (limpieza y 8 tablas gold) + tablas en Athena + orquestación (Step Functions/EventBridge) |
+| Entrenamiento del modelo | `iac/model-training/` | Entrena el recomendador LightGBM con datos Gold y guarda el artefacto `finsir.joblib` en S3 para que lo use la API |
 | API                 | `iac/api/`           | FastAPI que lee las tablas gold (entrenamiento + 6 analíticas) desde Athena, corre en ECS Fargate                        |
 
 ## Cómo fluyen los datos
@@ -168,13 +176,25 @@ export IS_AUTH_DEV_MODE=true AUTH_DEV_SECRET=dev-secret AUTH_REQUIRED_SCOPE=gold
 uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
-## App de Streamlit (demo)
+## Tablero de Streamlit (demo)
 
-`.streamlit/app.py` es una interfaz mínima que consulta las recomendaciones del
-modelo por ID de cliente (`GET /v1/recommendations/clients/{ncodpers}`) contra la
-API desplegada. Necesita la API corriendo y un `.streamlit/secrets.toml` con
-`API_BASE_URL` y `AUTH_DEV_SECRET`. Paso a paso en
-[`.streamlit/README.md`](.streamlit/README.md).
+El tablero de `dashboard/app.py` presenta el análisis de clientes, productos, transiciones, desempeño e impacto, y permite consultar recomendaciones para un cliente. Para ejecutarlo localmente desde la raíz:
+
+~~~powershell
+python -m venv .venv
+.\\.venv\Scripts\python.exe -m pip install -r dashboard\requirements.txt
+Copy-Item .streamlit\secrets.toml.example .streamlit\secrets.toml
+# Edita secrets.toml y configura la URL de la API y el secreto de autenticación.
+.\\.venv\Scripts\python.exe -m streamlit run dashboard\app.py
+~~~
+
+Requiere la API desplegada y accesible. La guía completa, incluidos los pasos para publicar en Streamlit Community Cloud, está en [`dashboard/README.md`](dashboard/README.md). No compartas ni subas el archivo `.streamlit/secrets.toml` real.
+
+## Datos y resultados del modelo
+
+El proyecto usa el dataset público [Santander Product Recommendation en Kaggle](https://www.kaggle.com/competitions/santander-product-recommendation/data). El archivo `train_ver2.csv` no se distribuye en este repositorio; debes obtenerlo desde Kaggle y aceptar sus condiciones de acceso y uso.
+
+El modelo LightGBM ordena los 24 productos y se evalúa con cortes temporales. En el conjunto de prueba registrado en [`dashboard/assets/model/metrics.json`](dashboard/assets/model/metrics.json), LightGBM obtuvo MAP@7 de **0,0268** y hit rate@7 de **0,0298**; el baseline de popularidad obtuvo **0,0195** y **0,0290**, respectivamente. Son resultados de holdout: la diferencia observada no demuestra que una campaña real cause más conversiones. Las métricas y supuestos adicionales se muestran en el tablero.
 
 ## Tests
 
